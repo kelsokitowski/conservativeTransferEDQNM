@@ -1,8 +1,8 @@
-# Cyclic Symmetry Implementation for EDQNM
+# Cyclic Symmetry Verification for EDQNM
 
 ## Overview
 
-This implementation achieves energy conservation through **geometric cyclic symmetry** of the triad domain integration. Instead of relying solely on algebraic delta corrections, we sum contributions from all three cyclic permutations (k,p,q) → (p,q,k) → (q,k,p).
+This implementation uses **cyclic symmetry verification** to ensure geometric correctness of the triad domain integration, while integrating each triad exactly once via k-slices. Energy conservation is achieved through proper volume weighting and delta corrections, not by summing multiple permutations.
 
 ## Mathematical Foundation
 
@@ -11,7 +11,7 @@ The triad domain |p-q| < k < p+q is **invariant under cyclic permutations**:
 - The volume element is also invariant: dv(i,j,k) = dv(j,k,i) = dv(k,i,j)
 - And symmetric under reflection: dv(i,j,k) = dv(j,i,k)
 
-This means each triad can be integrated in three equivalent ways, and summing all three ensures symmetric treatment of all modes.
+This symmetry is **verified** to ensure correctness, but each triad is **integrated only once** to preserve proper physics.
 
 ## Key Changes
 
@@ -46,31 +46,39 @@ Then compute three weight arrays:
 
 ### 2. transfer_scatter_add_kernelE0.m
 
-Now sums contributions from **three separate integration loops**:
+Uses **k-slice integration only**:
 
-1. **k-slice loop**: Integrates over (p,q) slices for each k
-2. **p-slice loop**: Integrates over (q,k) slices for each p
-3. **q-slice loop**: Integrates over (k,p) slices for each q
+- **k-slice loop**: Integrates over (p,q) for each k
+  - Each triad integrated exactly once
+  - Uses geometric centroids for (p,q) coordinates
+  - Evaluates kernel at (kstar, pstar, qstar)
+  - Applies delta correction for local energy conservation: dEk + dEp + dEq = 0
+  - Scatter-adds to bins (kj, pj, qj)
+  - Handles p↔q mirroring
 
-Each loop:
-- Retrieves appropriate weights and centroids
-- Evaluates kernel at (kstar, pstar, qstar)
-- Applies delta correction for local energy conservation
-- Scatter-adds to bins (kj, pj, qj)
-- Handles p↔q mirroring
+**Why only k-slice?**
+- Each unique triad should be integrated once (not three times)
+- The cyclic symmetry checks verify our geometry is correct
+- Multiple integrations at different evaluation points don't improve conservation
+- Physics: ∫∫∫ S(k,p,q) dv = 0 is achieved through delta corrections, not multiple counting
 
 ## Energy Conservation
 
-Energy conservation is achieved through **two mechanisms**:
+Energy conservation is achieved through **three mechanisms**:
 
 1. **Local (triad-level)**: Delta correction ensures each triad conserves energy
    ```matlab
    delta = (Jk*Sk_raw + Jp*Sp_raw + Jq*Sq_raw) / (Jk + Jp + Jq)
    ```
+   After correction: dEk + dEp + dEq = 0 (up to roundoff)
 
-2. **Global (geometric)**: Cyclic symmetry ensures balanced treatment of all modes
-   - Each mode k receives contributions where it plays k-leg, p-leg, and q-leg roles
-   - Symmetric integration measure prevents systematic bias
+2. **Geometric correctness**: Cyclic symmetry of dv verified via permutation checks
+   - Ensures the triad domain is correctly discretized
+   - No systematic bias from asymmetric volume computation
+
+3. **Proper normalization**: Each triad integrated once with weight dv/dk
+   - No multiple counting
+   - Volume element properly normalized by bin width
 
 ## Notes on Centroids
 

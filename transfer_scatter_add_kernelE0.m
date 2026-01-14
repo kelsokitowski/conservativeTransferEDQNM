@@ -1,8 +1,9 @@
 function [S_NL_E, diag] = transfer_scatter_add_kernelE0(kVals, edges, E, weight_k, centroidX_k, centroidY_k, weight_p, centroidX_p, centroidY_p, weight_q, centroidX_q, centroidY_q)
-% transfer_scatter_add_kernelE0 (CYCLIC SYMMETRIC VERSION)
+% transfer_scatter_add_kernelE0 (K-SLICE INTEGRATION)
 %
-% Sums contributions from all three cyclic permutations (k,p,q), (p,q,k), (q,k,p)
-% to achieve energy conservation through geometric symmetry.
+% Integrates over k-slices only: each triad integrated once with proper volume weighting.
+% The cyclic symmetry of dv (verified externally) ensures geometric correctness.
+% Delta correction at each triad enforces local energy conservation.
 
 kVals = double(kVals(:));
 edges = double(edges(:));
@@ -87,104 +88,14 @@ for kj = 1:N
 end
 
 % ===========================================================================
-% CONTRIBUTION 2: p-slices (integrate over q,k for fixed p)
-% Weight stored at (qj,kj,pj) → scatter-add to bins (pj,qj,kj) with roles (p,q,k)
+% NOTE: p-slices and q-slices commented out - using only k-slice integration
 % ===========================================================================
-for pj = 1:N
-    pstar = krep(pj);
-
-    for qj = 1:N
-        for kj = qj:N
-            wk = weight_p(qj,kj,pj);
-            if wk <= 0, continue; end
-
-            dv = wk * dk(pj);
-
-            % Retrieve centroids: centroidX_p is q, centroidY_p is k
-            qstar = centroidX_p(qj,kj,pj);
-            kstar = centroidY_p(qj,kj,pj);
-
-            [dEk,dEp,dEq] = triad_energy_increment_direct(kstar, pstar, qstar, dv, edges, E0_at);
-
-            % Scatter-add to bins (kj, pj, qj)
-            [dE(kj), cE(kj)] = kahan_add(dE(kj), cE(kj), dEk);
-            [dE(pj), cE(pj)] = kahan_add(dE(pj), cE(pj), dEp);
-            [dE(qj), cE(qj)] = kahan_add(dE(qj), cE(qj), dEq);
-
-            diag.maxTriadEnergyResidual = max(diag.maxTriadEnergyResidual, abs(dEk+dEp+dEq));
-            diag.numTriadsUsed = diag.numTriadsUsed + 1;
-
-            % Mirror if needed
-            if kj > qj
-                wk2 = weight_p(kj,qj,pj);
-                if wk2 > 0
-                    dv2 = wk2 * dk(pj);
-                    qstar2 = centroidX_p(kj,qj,pj);
-                    kstar2 = centroidY_p(kj,qj,pj);
-
-                    [dEk2,dEp2,dEq2] = triad_energy_increment_direct(kstar2, pstar, qstar2, dv2, edges, E0_at);
-
-                    [dE(kj), cE(kj)] = kahan_add(dE(kj), cE(kj), dEk2);
-                    [dE(pj), cE(pj)] = kahan_add(dE(pj), cE(pj), dEp2);
-                    [dE(qj), cE(qj)] = kahan_add(dE(qj), cE(qj), dEq2);
-
-                    diag.maxTriadEnergyResidual = max(diag.maxTriadEnergyResidual, abs(dEk2+dEp2+dEq2));
-                    diag.numTriadsUsed = diag.numTriadsUsed + 1;
-                end
-            end
-        end
-    end
-end
-
-% ===========================================================================
-% CONTRIBUTION 3: q-slices (integrate over k,p for fixed q)
-% Weight stored at (kj,pj,qj) → scatter-add to bins (qj,kj,pj) with roles (q,k,p)
-% ===========================================================================
-for qj = 1:N
-    qstar = krep(qj);
-
-    for kj = 1:N
-        for pj = kj:N
-            wk = weight_q(kj,pj,qj);
-            if wk <= 0, continue; end
-
-            dv = wk * dk(qj);
-
-            % Retrieve centroids: centroidX_q is k, centroidY_q is p
-            kstar = centroidX_q(kj,pj,qj);
-            pstar = centroidY_q(kj,pj,qj);
-
-            [dEk,dEp,dEq] = triad_energy_increment_direct(kstar, pstar, qstar, dv, edges, E0_at);
-
-            % Scatter-add to bins (kj, pj, qj)
-            [dE(kj), cE(kj)] = kahan_add(dE(kj), cE(kj), dEk);
-            [dE(pj), cE(pj)] = kahan_add(dE(pj), cE(pj), dEp);
-            [dE(qj), cE(qj)] = kahan_add(dE(qj), cE(qj), dEq);
-
-            diag.maxTriadEnergyResidual = max(diag.maxTriadEnergyResidual, abs(dEk+dEp+dEq));
-            diag.numTriadsUsed = diag.numTriadsUsed + 1;
-
-            % Mirror if needed
-            if pj > kj
-                wk2 = weight_q(pj,kj,qj);
-                if wk2 > 0
-                    dv2 = wk2 * dk(qj);
-                    kstar2 = centroidX_q(pj,kj,qj);
-                    pstar2 = centroidY_q(pj,kj,qj);
-
-                    [dEk2,dEp2,dEq2] = triad_energy_increment_direct(kstar2, pstar2, qstar, dv2, edges, E0_at);
-
-                    [dE(kj), cE(kj)] = kahan_add(dE(kj), cE(kj), dEk2);
-                    [dE(pj), cE(pj)] = kahan_add(dE(pj), cE(pj), dEp2);
-                    [dE(qj), cE(qj)] = kahan_add(dE(qj), cE(qj), dEq2);
-
-                    diag.maxTriadEnergyResidual = max(diag.maxTriadEnergyResidual, abs(dEk2+dEp2+dEq2));
-                    diag.numTriadsUsed = diag.numTriadsUsed + 1;
-                end
-            end
-        end
-    end
-end
+% The cyclic symmetry of dv is verified for correctness, but we integrate
+% each triad only once (via k-slice) to avoid triple-counting.
+% This preserves physics: each triad integrated once with proper volume weighting.
+%
+% % CONTRIBUTION 2: p-slices (integrate over q,k for fixed p)
+% % CONTRIBUTION 3: q-slices (integrate over k,p for fixed q)
 
 S_NL_E = dE ./ dk;
 diag.FV_total_energy_transfer = sum(S_NL_E .* dk);   % = sum(dE)
