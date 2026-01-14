@@ -4,25 +4,41 @@
 
 This implementation achieves energy conservation through **geometric cyclic symmetry** of the triad domain integration. Instead of relying solely on algebraic delta corrections, we sum contributions from all three cyclic permutations (k,p,q) → (p,q,k) → (q,k,p).
 
+## Mathematical Foundation
+
+The triad domain |p-q| < k < p+q is **invariant under cyclic permutations**:
+- If (p,q,k) is a valid triad, then so are (q,k,p) and (k,p,q)
+- The volume element is also invariant: dv(i,j,k) = dv(j,k,i) = dv(k,i,j)
+- And symmetric under reflection: dv(i,j,k) = dv(j,i,k)
+
+This means each triad can be integrated in three equivalent ways, and summing all three ensures symmetric treatment of all modes.
+
 ## Key Changes
 
 ### 1. buildTriadWeightsCentroidsExact.m
 
-Now returns **three sets of weights and centroids**:
+**Core Insight**: Fill `dv` array with all 6 permutations (3 cyclic + 3 p↔q mirrors), then compute weights.
 
-- **k-slices**: `weight_k(pj,qj,kj) = vol/dk(kj)`
+The `dv` array satisfies:
+- **Cyclic symmetry**: `dv(i,j,k) = dv(j,k,i) = dv(k,i,j)`
+- **Reflection symmetry**: `dv(i,j,k) = dv(j,i,k)`
+
+Then compute three weight arrays:
+- **k-slices**: `weight_k(pj,qj,kj) = dv(pj,qj,kj) / dk(kj)`
   - Integrate over (p,q) for fixed k
   - Centroids: (p*, q*) from geometric centroid
 
-- **p-slices**: `weight_p(qj,kj,pj) = vol/dp(pj)`
-  - Integrate over (q,k) for fixed p (cyclic permutation)
+- **p-slices**: `weight_p(qj,kj,pj) = dv(qj,kj,pj) / dk(pj)`
+  - Integrate over (q,k) for fixed p
   - Centroids: (q*, k_center) - uses bin center for k
+  - Storage uses cyclically permuted indices
 
-- **q-slices**: `weight_q(kj,pj,qj) = vol/dq(qj)`
-  - Integrate over (k,p) for fixed q (cyclic permutation)
+- **q-slices**: `weight_q(kj,pj,qj) = dv(kj,pj,qj) / dk(qj)`
+  - Integrate over (k,p) for fixed q
   - Centroids: (k_center, p*) - uses bin center for k
+  - Storage uses cyclically permuted indices
 
-The same 3D volume `vol` contributes to all three weight arrays, divided by different bin widths and stored at cyclically permuted indices.
+**Important**: Due to cyclic symmetry of `dv` and the fact that all three divide by the 3rd index, the three weight arrays should be **identical**. This serves as a powerful consistency check!
 
 ### 2. transfer_scatter_add_kernelE0.m
 
@@ -62,8 +78,11 @@ Energy conservation is achieved through **two mechanisms**:
 ## Expected Behavior
 
 When running main.m, expect:
-- `p<->q symmetry errors`: Should be O(1e-15) (machine precision)
-- `FV total energy transfer`: Should be ≈0 (up to kernel symmetry × 3 slices)
+- `Cyclic symmetry errors in dv`: Should be O(1e-15) or exactly 0
+- `p<->q symmetry error in dv`: Should be O(1e-15) or exactly 0
+- `p<->q symmetry errors in weights`: Should be O(1e-15) or exactly 0
+- `Weight consistency`: All three weight arrays should be identical (error ~ 0)
+- `FV total energy transfer`: Should be ≈0 (limited by kernel symmetry and numerical precision)
 - `max triad energy residual`: Should be O(1e-15) (machine precision)
 
 ## Future Work

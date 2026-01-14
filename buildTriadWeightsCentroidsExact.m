@@ -81,44 +81,55 @@ function [weight_k, centroidX_k, centroidY_k, weight_p, centroidX_p, centroidY_p
                 [vol, ~, ~, px_in, qy_in] = dv_moments_oneCell_exact(kL,kU,pL,pU,qL,qU);
 
                 if vol > 0
+                    % Fill dv for all 6 permutations (cyclic + p↔q symmetry)
                     dv(pj,qj,kj) = vol;
+                    dv(qj,kj,pj) = vol;  % cyclic: (p,q,k) → (q,k,p)
+                    dv(kj,pj,qj) = vol;  % cyclic: (p,q,k) → (k,p,q)
+                    if qj ~= pj
+                        dv(qj,pj,kj) = vol;  % p↔q mirror
+                        dv(pj,kj,qj) = vol;  % p↔q mirror of 2nd cyclic
+                        dv(kj,qj,pj) = vol;  % p↔q mirror of 3rd cyclic
+                    end
 
-                    % k-slice: weight divided by dk(kj), integrate over (p,q)
-                    weight_k(pj,qj,kj)   = vol / dk(kj);
+                    % Store centroids for k-slice at (pj,qj,kj)
                     centroidX_k(pj,qj,kj) = px_in;  % p coordinate
                     centroidY_k(pj,qj,kj) = qy_in;  % q coordinate
 
-                    % p-slice: weight divided by dk(pj), integrate over (q,k)
-                    % Store at (qj,kj,pj) - cyclic permutation
-                    weight_p(qj,kj,pj)   = vol / dk(pj);
-                    centroidX_p(qj,kj,pj) = qy_in;  % q coordinate
-                    centroidY_p(qj,kj,pj) = kVals(kj);  % k coordinate (use bin center)
+                    % For p-slice at (qj,kj,pj): q is 1st coord, k is 2nd coord
+                    centroidX_p(qj,kj,pj) = qy_in;      % q coordinate
+                    centroidY_p(qj,kj,pj) = kVals(kj);  % k coordinate (bin center)
 
-                    % q-slice: weight divided by dk(qj), integrate over (k,p)
-                    % Store at (kj,pj,qj) - cyclic permutation
-                    weight_q(kj,pj,qj)   = vol / dk(qj);
-                    centroidX_q(kj,pj,qj) = kVals(kj);  % k coordinate (use bin center)
-                    centroidY_q(kj,pj,qj) = px_in;  % p coordinate
+                    % For q-slice at (kj,pj,qj): k is 1st coord, p is 2nd coord
+                    centroidX_q(kj,pj,qj) = kVals(kj);  % k coordinate (bin center)
+                    centroidY_q(kj,pj,qj) = px_in;      % p coordinate
 
-                    % Mirror p<->q symmetry for all three permutations
+                    % Mirror p<->q symmetry for centroids
                     if qj ~= pj
-                        dv(qj,pj,kj) = vol;
-
-                        % k-slice mirrored: (qj,pj,kj)
-                        weight_k(qj,pj,kj)   = vol / dk(kj);
                         centroidX_k(qj,pj,kj) = qy_in;
                         centroidY_k(qj,pj,kj) = px_in;
 
-                        % p-slice mirrored: (kj,qj,pj) ← mirror of (qj,kj,pj)
-                        weight_p(kj,qj,pj)   = vol / dk(pj);
-                        centroidX_p(kj,qj,pj) = kVals(kj);
-                        centroidY_p(kj,qj,pj) = qy_in;
+                        centroidX_p(kj,qj,pj) = px_in;      % swapped from above
+                        centroidY_p(kj,qj,pj) = kVals(kj);
 
-                        % q-slice mirrored: (pj,kj,qj) ← mirror of (kj,pj,qj)
-                        weight_q(pj,kj,qj)   = vol / dk(qj);
-                        centroidX_q(pj,kj,qj) = px_in;
-                        centroidY_q(pj,kj,qj) = kVals(kj);
+                        centroidX_q(pj,kj,qj) = kVals(kj);
+                        centroidY_q(pj,kj,qj) = qy_in;      % swapped from above
                     end
+                end
+            end
+        end
+    end
+
+    % Compute weights from dv (now properly filled with cyclic symmetry)
+    % weight_k(pj,qj,kj) = dv(pj,qj,kj) / dk(kj)  -- 3rd index is k
+    % weight_p(qj,kj,pj) = dv(qj,kj,pj) / dk(pj)  -- 3rd index is p
+    % weight_q(kj,pj,qj) = dv(kj,pj,qj) / dk(qj)  -- 3rd index is q
+    for i = 1:N
+        for j = 1:N
+            for k = 1:N
+                if dv(i,j,k) > 0
+                    weight_k(i,j,k) = dv(i,j,k) / dk(k);
+                    weight_p(i,j,k) = dv(i,j,k) / dk(k);  % All use 3rd index!
+                    weight_q(i,j,k) = dv(i,j,k) / dk(k);
                 end
             end
         end
