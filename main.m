@@ -93,11 +93,26 @@ NotintegerVal = 0.0;
 kmin = 0.01;
 [weight_k, CxVals_k, CyVals_k, weight_p, CxVals_p, CyVals_p, weight_q, CxVals_q, CyVals_q, dv, edges] = buildTriadWeightsCentroidsExact(kVals, kmin);
 
+% Check cyclic symmetry of dv: dv(i,j,k) = dv(j,k,i) = dv(k,i,j)
+cycErr1 = max(abs(dv - permute(dv,[2 3 1])),[],'all');  % (i,j,k) vs (j,k,i)
+cycErr2 = max(abs(dv - permute(dv,[3 1 2])),[],'all');  % (i,j,k) vs (k,i,j)
+fprintf('Cyclic symmetry errors in dv: (i,j,k)→(j,k,i): %g  (i,j,k)→(k,i,j): %g\n', cycErr1, cycErr2);
+
+% Check p<->q symmetry: dv(i,j,k) = dv(j,i,k)
+pqErr = max(abs(dv - permute(dv,[2 1 3])),[],'all');
+fprintf('p<->q symmetry error in dv: %g\n', pqErr);
+
 % Check p<->q symmetry for each weight set
 symErr_k = max(abs(weight_k - permute(weight_k,[2 1 3])),[],'all');
 symErr_p = max(abs(weight_p - permute(weight_p,[2 1 3])),[],'all');
 symErr_q = max(abs(weight_q - permute(weight_q,[2 1 3])),[],'all');
-fprintf('p<->q symmetry errors: k-slice=%g  p-slice=%g  q-slice=%g\n', symErr_k, symErr_p, symErr_q);
+fprintf('p<->q symmetry errors in weights: k-slice=%g  p-slice=%g  q-slice=%g\n', symErr_k, symErr_p, symErr_q);
+
+% Verify cyclic consistency of weights: all should equal dv/dk(3rd index)
+% Since all three use same formula, they should be identical!
+weightErr_kp = max(abs(weight_k - weight_p),[],'all');
+weightErr_kq = max(abs(weight_k - weight_q),[],'all');
+fprintf('Weight consistency: max|weight_k - weight_p|=%g  max|weight_k - weight_q|=%g\n', weightErr_kp, weightErr_kq);
 
 % Check total area for k-slices (should be consistent across all k)
 A_k = zeros(length(kVals),1);
