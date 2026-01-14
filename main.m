@@ -121,10 +121,10 @@ for kj=1:length(kVals)
 end
 fprintf('A_k min/max = %g  %g\n', min(A_k), max(A_k));
 
-[S_NL_E, diag] = transfer_scatter_add_kernelE0(kVals, edges, E, weight_k, CxVals_k, CyVals_k, weight_p, CxVals_p, CyVals_p, weight_q, CxVals_q, CyVals_q);
-fprintf('FV total energy transfer = %.20e\n', diag.FV_total_energy_transfer);
-fprintf('max triad energy residual = %.20e\n', diag.maxTriadEnergyResidual);
-fprintf('triads used = %d\n', diag.numTriadsUsed);
+[S_NL_E, FV_total_energy_transfer, maxTriadEnergyResidual, numTriadsUsed] = transfer_scatter_add_kernelE0(kVals, edges, E, weight_k, CxVals_k, CyVals_k, weight_p, CxVals_p, CyVals_p, weight_q, CxVals_q, CyVals_q);
+fprintf('FV total energy transfer = %.20e\n', FV_total_energy_transfer);
+fprintf('max triad energy residual = %.20e\n', maxTriadEnergyResidual);
+fprintf('triads used = %d\n', numTriadsUsed);
 
 partial = cumsum(S_NL_E .* diff(edges));
 semilogx(sqrt(edges(1:end-1).*edges(2:end)), partial), grid on, yline(0,'--')

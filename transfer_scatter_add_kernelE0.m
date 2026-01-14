@@ -1,9 +1,15 @@
-function [S_NL_E, diag] = transfer_scatter_add_kernelE0(kVals, edges, E, weight_k, centroidX_k, centroidY_k, weight_p, centroidX_p, centroidY_p, weight_q, centroidX_q, centroidY_q)
+function [S_NL_E, FV_total_energy_transfer, maxTriadEnergyResidual, numTriadsUsed] = transfer_scatter_add_kernelE0(kVals, edges, E, weight_k, centroidX_k, centroidY_k, weight_p, centroidX_p, centroidY_p, weight_q, centroidX_q, centroidY_q)
 % transfer_scatter_add_kernelE0 (K-SLICE INTEGRATION)
 %
 % Integrates over k-slices only: each triad integrated once with proper volume weighting.
 % The cyclic symmetry of dv (verified externally) ensures geometric correctness.
 % Delta correction at each triad enforces local energy conservation.
+%
+% Outputs:
+%   S_NL_E                    - Energy transfer rate (N x 1)
+%   FV_total_energy_transfer  - Sum of all energy transfers (scalar)
+%   maxTriadEnergyResidual    - Maximum residual across all triads (scalar)
+%   numTriadsUsed             - Number of triads processed (scalar)
 
 kVals = double(kVals(:));
 edges = double(edges(:));
@@ -35,8 +41,9 @@ E0_at = @(x) exp(interp1(logk, logE0, log(x), 'linear', 'extrap'));
 % Kahan accumulators for bin energy increments
 dE = zeros(N,1);  cE = zeros(N,1);
 
-diag.numTriadsUsed = 0;
-diag.maxTriadEnergyResidual = 0;
+% Diagnostic scalars
+numTriadsUsed = 0;
+maxTriadEnergyResidual = 0;
 
 % ===========================================================================
 % CONTRIBUTION 1: k-slices (integrate over p,q for fixed k)
@@ -62,8 +69,8 @@ for kj = 1:N
             [dE(pj), cE(pj)] = kahan_add(dE(pj), cE(pj), dEp);
             [dE(qj), cE(qj)] = kahan_add(dE(qj), cE(qj), dEq);
 
-            diag.maxTriadEnergyResidual = max(diag.maxTriadEnergyResidual, abs(dEk+dEp+dEq));
-            diag.numTriadsUsed = diag.numTriadsUsed + 1;
+            maxTriadEnergyResidual = max(maxTriadEnergyResidual, abs(dEk+dEp+dEq));
+            numTriadsUsed = numTriadsUsed + 1;
 
             % Mirror p<->q if needed
             if qj > pj
@@ -79,8 +86,8 @@ for kj = 1:N
                     [dE(pj), cE(pj)] = kahan_add(dE(pj), cE(pj), dEp2);
                     [dE(qj), cE(qj)] = kahan_add(dE(qj), cE(qj), dEq2);
 
-                    diag.maxTriadEnergyResidual = max(diag.maxTriadEnergyResidual, abs(dEk2+dEp2+dEq2));
-                    diag.numTriadsUsed = diag.numTriadsUsed + 1;
+                    maxTriadEnergyResidual = max(maxTriadEnergyResidual, abs(dEk2+dEp2+dEq2));
+                    numTriadsUsed = numTriadsUsed + 1;
                 end
             end
         end
@@ -98,7 +105,7 @@ end
 % % CONTRIBUTION 3: q-slices (integrate over k,p for fixed q)
 
 S_NL_E = dE ./ dk;
-diag.FV_total_energy_transfer = sum(S_NL_E .* dk);   % = sum(dE)
+FV_total_energy_transfer = sum(S_NL_E .* dk);   % = sum(dE)
 
 end
 
