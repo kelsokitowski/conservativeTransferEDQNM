@@ -91,28 +91,15 @@ function [weight_k, centroidX_k, centroidY_k, weight_p, centroidX_p, centroidY_p
                         dv(kj,qj,pj) = vol;  % p↔q mirror of 3rd cyclic
                     end
 
-                    % Store centroids for k-slice at (pj,qj,kj)
+                    % Store centroids for k-slice at (pj,qj,kj) only
+                    % These are the actual geometric centroids computed from polygon moments
                     centroidX_k(pj,qj,kj) = px_in;  % p coordinate
                     centroidY_k(pj,qj,kj) = qy_in;  % q coordinate
 
-                    % For p-slice at (qj,kj,pj): q is 1st coord, k is 2nd coord
-                    centroidX_p(qj,kj,pj) = qy_in;      % q coordinate
-                    centroidY_p(qj,kj,pj) = kVals(kj);  % k coordinate (bin center)
-
-                    % For q-slice at (kj,pj,qj): k is 1st coord, p is 2nd coord
-                    centroidX_q(kj,pj,qj) = kVals(kj);  % k coordinate (bin center)
-                    centroidY_q(kj,pj,qj) = px_in;      % p coordinate
-
-                    % Mirror p<->q symmetry for centroids
+                    % Mirror p<->q symmetry for k-slice centroids
                     if qj ~= pj
                         centroidX_k(qj,pj,kj) = qy_in;
                         centroidY_k(qj,pj,kj) = px_in;
-
-                        centroidX_p(kj,qj,pj) = px_in;      % swapped from above
-                        centroidY_p(kj,qj,pj) = kVals(kj);
-
-                        centroidX_q(pj,kj,qj) = kVals(kj);
-                        centroidY_q(pj,kj,qj) = qy_in;      % swapped from above
                     end
                 end
             end
@@ -130,6 +117,29 @@ function [weight_k, centroidX_k, centroidY_k, weight_p, centroidX_p, centroidY_p
                     weight_k(i,j,k) = dv(i,j,k) / dk(k);
                     weight_p(i,j,k) = dv(i,j,k) / dk(k);  % All use 3rd index!
                     weight_q(i,j,k) = dv(i,j,k) / dk(k);
+
+                    % Fill bin centers for all locations where weight > 0
+                    % (geometric centroids already filled where computed)
+                    if centroidX_k(i,j,k) == 0
+                        centroidX_k(i,j,k) = kVals(i);
+                    end
+                    if centroidY_k(i,j,k) == 0
+                        centroidY_k(i,j,k) = kVals(j);
+                    end
+
+                    if centroidX_p(i,j,k) == 0
+                        centroidX_p(i,j,k) = kVals(i);
+                    end
+                    if centroidY_p(i,j,k) == 0
+                        centroidY_p(i,j,k) = kVals(j);
+                    end
+
+                    if centroidX_q(i,j,k) == 0
+                        centroidX_q(i,j,k) = kVals(i);
+                    end
+                    if centroidY_q(i,j,k) == 0
+                        centroidY_q(i,j,k) = kVals(j);
+                    end
                 end
             end
         end

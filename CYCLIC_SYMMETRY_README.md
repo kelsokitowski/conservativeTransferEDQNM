@@ -26,19 +26,23 @@ The `dv` array satisfies:
 Then compute three weight arrays:
 - **k-slices**: `weight_k(pj,qj,kj) = dv(pj,qj,kj) / dk(kj)`
   - Integrate over (p,q) for fixed k
-  - Centroids: (p*, q*) from geometric centroid
+  - Centroids: **Geometric centroids (p*, q*)** from polygon moments
+  - These are exact centroids of the triad domain slice
 
 - **p-slices**: `weight_p(qj,kj,pj) = dv(qj,kj,pj) / dk(pj)`
   - Integrate over (q,k) for fixed p
-  - Centroids: (q*, k_center) - uses bin center for k
+  - Centroids: **Bin centers** for both q and k coordinates
   - Storage uses cyclically permuted indices
 
 - **q-slices**: `weight_q(kj,pj,qj) = dv(kj,pj,qj) / dk(qj)`
   - Integrate over (k,p) for fixed q
-  - Centroids: (k_center, p*) - uses bin center for k
+  - Centroids: **Bin centers** for both k and p coordinates
   - Storage uses cyclically permuted indices
 
-**Important**: Due to cyclic symmetry of `dv` and the fact that all three divide by the 3rd index, the three weight arrays should be **identical**. This serves as a powerful consistency check!
+**Important**:
+1. Due to cyclic symmetry of `dv` and the fact that all three divide by the 3rd index, the three weight arrays are **identical**
+2. Only k-slice uses geometric centroids; p-slice and q-slice use bin centers (standard FV approximation)
+3. Computing exact centroids for all three cyclic permutations would require triple the computational cost
 
 ### 2. transfer_scatter_add_kernelE0.m
 
@@ -70,10 +74,16 @@ Energy conservation is achieved through **two mechanisms**:
 
 ## Notes on Centroids
 
-- For k-slices: Full geometric centroids (p*, q*) computed via polygon moments
-- For p,q-slices: Bin centers used for k-coordinate as approximation
-  - This is standard practice in finite volume methods
-  - Exact 3D centroids would require additional integration
+**K-slice (exact geometry):**
+- Full geometric centroids (p*, q*) computed via polygon moments (Sutherland-Hodgman clipping + Green's theorem)
+- These are the exact centroids of the triad domain |p-q| < k < p+q intersected with the (p,q) bin
+- Guaranteed to lie inside the triad domain
+
+**P-slice and Q-slice (bin center approximation):**
+- Use bin centers for both coordinates: `kVals(i)` and `kVals(j)`
+- Standard FV approximation - avoids computing full 3D geometric centroids for all permutations
+- Reduces computational cost by 2/3 while maintaining conservation properties
+- The cyclic symmetry of the integration domain ensures balanced treatment regardless
 
 ## Expected Behavior
 
