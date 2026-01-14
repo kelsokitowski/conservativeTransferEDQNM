@@ -85,8 +85,8 @@ NotintegerVal = 0.0;
  Re0 = KE0^2/(epzilon*nu)
 
 
-Eic = icGenerate(kVals);
-loglog(kVals,Eic);
+%Eic = icGenerate(kVals);
+%loglog(kVals,Eic);
 %mu = getMu(Eic,kVals);
 %mu1 = A1*mu;
 %[weight,ySquaredAvg,triadFlag,outsideCutCell,insideCutCell,CxVals,CyVals,Q11]=midpoint2dShoelace(kVals);
