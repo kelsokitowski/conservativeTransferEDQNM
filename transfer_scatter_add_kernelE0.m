@@ -73,23 +73,23 @@ for kj = 1:N
             numTriadsUsed = numTriadsUsed + 1;
 
             % Mirror p<->q if needed
-            if qj > pj
-                wk2 = weight_k(qj,pj,kj);
-                if wk2 > 0
-                    dv2 = wk2 * dk(kj);
-                    pstar2 = centroidX_k(qj,pj,kj);  % swapped
-                    qstar2 = centroidY_k(qj,pj,kj);  % swapped
+            %if qj > pj
+            %    wk2 = weight_k(qj,pj,kj);
+            %    if wk2 > 0
+            %        dv2 = wk2 * dk(kj);
+            %        pstar2 = centroidX_k(qj,pj,kj);  % swapped
+            %        qstar2 = centroidY_k(qj,pj,kj);  % swapped
 
-                    [dEk2,dEp2,dEq2] = triad_energy_increment_direct(kstar, pstar2, qstar2, dv2, edges, E0_at);
+            %        [dEk2,dEp2,dEq2] = triad_energy_increment_direct(kstar, pstar2, qstar2, dv2, edges, E0_at);
 
-                    [dE(kj), cE(kj)] = kahan_add(dE(kj), cE(kj), dEk2);
-                    [dE(pj), cE(pj)] = kahan_add(dE(pj), cE(pj), dEp2);
-                    [dE(qj), cE(qj)] = kahan_add(dE(qj), cE(qj), dEq2);
+            %        [dE(kj), cE(kj)] = kahan_add(dE(kj), cE(kj), dEk2);
+            %        [dE(pj), cE(pj)] = kahan_add(dE(pj), cE(pj), dEp2);
+            %        [dE(qj), cE(qj)] = kahan_add(dE(qj), cE(qj), dEq2);
 
-                    maxTriadEnergyResidual = max(maxTriadEnergyResidual, abs(dEk2+dEp2+dEq2));
-                    numTriadsUsed = numTriadsUsed + 1;
-                end
-            end
+            %        diag.maxTriadEnergyResidual = max(diag.maxTriadEnergyResidual, abs(dEk2+dEp2+dEq2));
+            %        diag.numTriadsUsed = diag.numTriadsUsed + 1;
+            %    end
+            %end
         end
     end
 end
@@ -166,3 +166,4 @@ t = sum_old + y;
 c_new = (t - sum_old) - y;
 sum_new = t;
 end
+
