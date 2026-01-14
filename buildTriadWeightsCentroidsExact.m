@@ -1,12 +1,15 @@
-function [weight, centroidX, centroidY, dv, edges] = buildTriadWeightsCentroidsExact(kVals, kmin)
-% buildTriadWeightsCentroidsExact (GEOMETRIC centroid version)
+function [weight_k, centroidX_k, centroidY_k, weight_p, centroidX_p, centroidY_p, weight_q, centroidX_q, centroidY_q, dv, edges] = buildTriadWeightsCentroidsExact(kVals, kmin)
+% buildTriadWeightsCentroidsExact (CYCLIC SYMMETRIC VERSION)
 %
-% Same dv and weights as before.
-% The only change is that the returned evaluation point (centroidX/Y) is now
-% the GEOMETRIC centroid (pc,qc) of the dominant convex polygon piece, which
-% is guaranteed to lie inside that piece (and hence inside the triad domain
-% intersection in the cell). This avoids the failure mode of L-weighted
-% centroids (mp_loc/dv_loc) drifting outside in thin slivers.
+% Computes weights and centroids for all three cyclic permutations:
+%   (k,p,q), (p,q,k), (q,k,p)
+% to achieve energy conservation through geometric symmetry.
+%
+% Returns:
+%   weight_k(pj,qj,kj) = vol/dk(kj) - for k-slice integration (over p,q)
+%   weight_p(qj,kj,pj) = vol/dp(pj) - for p-slice integration (over q,k)
+%   weight_q(kj,pj,qj) = vol/dq(qj) - for q-slice integration (over k,p)
+%   Corresponding centroid arrays for each permutation
 
     if nargin < 2 || isempty(kmin)
         kmin = 0.01;
@@ -25,17 +28,23 @@ function [weight, centroidX, centroidY, dv, edges] = buildTriadWeightsCentroidsE
     edges = logCellEdgesFromCenters_withKmin(kVals, kmin);
     dk = edges(2:end) - edges(1:end-1);
 
-    % Allocate outputs in (pj,qj,kj)
-    dv     = zeros(N,N,N);
-    weight = zeros(N,N,N);
+    % Allocate outputs for all three cyclic permutations
+    dv = zeros(N,N,N);
 
-    % Choice A (robust for production): initialize centroids to 0
-    centroidX = zeros(N,N,N);
-    centroidY = zeros(N,N,N);
+    % k-slice: integrate over (p,q) for fixed k
+    weight_k   = zeros(N,N,N);
+    centroidX_k = zeros(N,N,N);
+    centroidY_k = zeros(N,N,N);
 
-    % Choice B (debugging): initialize to NaN to catch accidental use
-    % centroidX = nan(N,N,N);
-    % centroidY = nan(N,N,N);
+    % p-slice: integrate over (q,k) for fixed p
+    weight_p   = zeros(N,N,N);
+    centroidX_p = zeros(N,N,N);
+    centroidY_p = zeros(N,N,N);
+
+    % q-slice: integrate over (k,p) for fixed q
+    weight_q   = zeros(N,N,N);
+    centroidX_q = zeros(N,N,N);
+    centroidY_q = zeros(N,N,N);
 
     e = edges;
 
@@ -72,27 +81,43 @@ function [weight, centroidX, centroidY, dv, edges] = buildTriadWeightsCentroidsE
                 [vol, ~, ~, px_in, qy_in] = dv_moments_oneCell_exact(kL,kU,pL,pU,qL,qU);
 
                 if vol > 0
-                    dv(pj,qj,kj)     = vol;
-                    weight(pj,qj,kj) = vol / dkj;
+                    dv(pj,qj,kj) = vol;
 
-                    centroidX(pj,qj,kj) = px_in;
-                    centroidY(pj,qj,kj) = qy_in;
+                    % k-slice: weight divided by dk(kj), integrate over (p,q)
+                    weight_k(pj,qj,kj)   = vol / dk(kj);
+                    centroidX_k(pj,qj,kj) = px_in;  % p coordinate
+                    centroidY_k(pj,qj,kj) = qy_in;  % q coordinate
 
-                    % Optional: hard sanity checks (enable if debugging)
-                    % if ~(isfinite(px_in) && isreal(px_in) && px_in >= pL && px_in <= pU && px_in > 0)
-                    %     error('Bad centroidX at (pj,qj,kj)=(%d,%d,%d): %g not in [%g,%g]', pj,qj,kj,px_in,pL,pU);
-                    % end
-                    % if ~(isfinite(qy_in) && isreal(qy_in) && qy_in >= qL && qy_in <= qU && qy_in > 0)
-                    %     error('Bad centroidY at (pj,qj,kj)=(%d,%d,%d): %g not in [%g,%g]', pj,qj,kj,qy_in,qL,qU);
-                    % end
+                    % p-slice: weight divided by dk(pj), integrate over (q,k)
+                    % Store at (qj,kj,pj) - cyclic permutation
+                    weight_p(qj,kj,pj)   = vol / dk(pj);
+                    centroidX_p(qj,kj,pj) = qy_in;  % q coordinate
+                    centroidY_p(qj,kj,pj) = kVals(kj);  % k coordinate (use bin center)
 
-                    % Mirror p<->q symmetry
+                    % q-slice: weight divided by dk(qj), integrate over (k,p)
+                    % Store at (kj,pj,qj) - cyclic permutation
+                    weight_q(kj,pj,qj)   = vol / dk(qj);
+                    centroidX_q(kj,pj,qj) = kVals(kj);  % k coordinate (use bin center)
+                    centroidY_q(kj,pj,qj) = px_in;  % p coordinate
+
+                    % Mirror p<->q symmetry for all three permutations
                     if qj ~= pj
-                        dv(qj,pj,kj)     = vol;
-                        weight(qj,pj,kj) = vol / dkj;
+                        dv(qj,pj,kj) = vol;
 
-                        centroidX(qj,pj,kj) = qy_in;
-                        centroidY(qj,pj,kj) = px_in;
+                        % k-slice mirrored: (qj,pj,kj)
+                        weight_k(qj,pj,kj)   = vol / dk(kj);
+                        centroidX_k(qj,pj,kj) = qy_in;
+                        centroidY_k(qj,pj,kj) = px_in;
+
+                        % p-slice mirrored: (kj,qj,pj) ← mirror of (qj,kj,pj)
+                        weight_p(kj,qj,pj)   = vol / dk(pj);
+                        centroidX_p(kj,qj,pj) = kVals(kj);
+                        centroidY_p(kj,qj,pj) = qy_in;
+
+                        % q-slice mirrored: (pj,kj,qj) ← mirror of (kj,pj,qj)
+                        weight_q(pj,kj,qj)   = vol / dk(qj);
+                        centroidX_q(pj,kj,qj) = px_in;
+                        centroidY_q(pj,kj,qj) = kVals(kj);
                     end
                 end
             end

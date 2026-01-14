@@ -91,19 +91,22 @@ NotintegerVal = 0.0;
 %mu1 = A1*mu;
 %[weight,ySquaredAvg,triadFlag,outsideCutCell,insideCutCell,CxVals,CyVals,Q11]=midpoint2dShoelace(kVals);
 kmin = 0.01;
-[weight, CxVals,CyVals, dv, edges] = buildTriadWeightsCentroidsExact(kVals, kmin);
+[weight_k, CxVals_k, CyVals_k, weight_p, CxVals_p, CyVals_p, weight_q, CxVals_q, CyVals_q, dv, edges] = buildTriadWeightsCentroidsExact(kVals, kmin);
 
- symErr = max(abs(weight - permute(weight,[2 1 3])),[],'all');
-fprintf('symErr=%g\n', symErr);
+% Check p<->q symmetry for each weight set
+symErr_k = max(abs(weight_k - permute(weight_k,[2 1 3])),[],'all');
+symErr_p = max(abs(weight_p - permute(weight_p,[2 1 3])),[],'all');
+symErr_q = max(abs(weight_q - permute(weight_q,[2 1 3])),[],'all');
+fprintf('p<->q symmetry errors: k-slice=%g  p-slice=%g  q-slice=%g\n', symErr_k, symErr_p, symErr_q);
 
+% Check total area for k-slices (should be consistent across all k)
 A_k = zeros(length(kVals),1);
 for kj=1:length(kVals)
-    A_k(kj) = sum(weight(:,:,kj),'all');
+    A_k(kj) = sum(weight_k(:,:,kj),'all');
 end
 fprintf('A_k min/max = %g  %g\n', min(A_k), max(A_k));
 
-
-[S_NL_E, diag] = transfer_scatter_add_kernelE0(kVals, edges, E, weight, CxVals, CyVals);
+[S_NL_E, diag] = transfer_scatter_add_kernelE0(kVals, edges, E, weight_k, CxVals_k, CyVals_k, weight_p, CxVals_p, CyVals_p, weight_q, CxVals_q, CyVals_q);
 fprintf('FV total energy transfer = %.20e\n', diag.FV_total_energy_transfer);
 fprintf('max triad energy residual = %.20e\n', diag.maxTriadEnergyResidual);
 fprintf('triads used = %d\n', diag.numTriadsUsed);
