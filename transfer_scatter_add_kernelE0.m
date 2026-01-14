@@ -5,8 +5,17 @@ function [S_NL_E, FV_total_energy_transfer, maxTriadEnergyResidual, numTriadsUse
 % The cyclic symmetry of dv (verified externally) ensures geometric correctness.
 % Delta correction at each triad enforces local energy conservation.
 %
+% PARALLELIZATION: The kj loop is parallelizable via OpenMP in Fortran 90:
+%   !$OMP PARALLEL DO PRIVATE(pj,qj,wk,dv_local,pstar,qstar,dEk,dEp,dEq) &
+%   !$OMP             REDUCTION(+:dE) REDUCTION(MAX:maxTriadEnergyResidual) &
+%   !$OMP             REDUCTION(+:numTriadsUsed) SCHEDULE(dynamic)
+%   do kj = 1, kLength
+%       ...
+%   end do
+%   !$OMP END PARALLEL DO
+%
 % Outputs:
-%   S_NL_E                    - Energy transfer rate (N x 1)
+%   S_NL_E                    - Energy transfer rate (kLength x 1)
 %   FV_total_energy_transfer  - Sum of all energy transfers (scalar)
 %   maxTriadEnergyResidual    - Maximum residual across all triads (scalar)
 %   numTriadsUsed             - Number of triads processed (scalar)
@@ -27,7 +36,7 @@ weight_q    = double(weight_q);
 centroidX_q = double(centroidX_q);
 centroidY_q = double(centroidY_q);
 
-N  = length(kVals);
+kLength = length(kVals);
 dk = diff(edges(:));
 krep = sqrt(edges(1:end-1).*edges(2:end));  % FV reps
 
@@ -38,36 +47,36 @@ logk  = log(kVals);
 logE0 = log(E0s);
 E0_at = @(x) exp(interp1(logk, logE0, log(x), 'linear', 'extrap'));
 
-% Kahan accumulators for bin energy increments
-dE = zeros(N,1);  cE = zeros(N,1);
+% Energy increment accumulators (thread-safe with OpenMP REDUCTION)
+dE = zeros(kLength,1);
 
-% Diagnostic scalars
+% Diagnostic scalars (thread-safe with OpenMP REDUCTION)
 numTriadsUsed = 0;
-maxTriadEnergyResidual = 0;
+maxTriadEnergyResidual = 0.0;
 
 % ===========================================================================
-% CONTRIBUTION 1: k-slices (integrate over p,q for fixed k)
+% K-SLICE LOOP: Parallelizable over kj (see OpenMP directives in header)
 % ===========================================================================
-for kj = 1:N
+for kj = 1:kLength
     kstar = krep(kj);
 
-    for pj = 1:N
-        for qj = pj:N
+    for pj = 1:kLength
+        for qj = pj:kLength
             wk = weight_k(pj,qj,kj);
             if wk <= 0, continue; end
 
-            dv = wk * dk(kj);
+            dv_local = wk * dk(kj);
 
             % Evaluate kernel at (kstar, pstar, qstar) from k-slice centroids
             pstar = centroidX_k(pj,qj,kj);
             qstar = centroidY_k(pj,qj,kj);
 
-            [dEk,dEp,dEq] = triad_energy_increment_direct(kstar, pstar, qstar, dv, edges, E0_at);
+            [dEk,dEp,dEq] = triad_energy_increment_direct(kstar, pstar, qstar, dv_local, edges, E0_at);
 
-            % Scatter-add to bins (kj, pj, qj)
-            [dE(kj), cE(kj)] = kahan_add(dE(kj), cE(kj), dEk);
-            [dE(pj), cE(pj)] = kahan_add(dE(pj), cE(pj), dEp);
-            [dE(qj), cE(qj)] = kahan_add(dE(qj), cE(qj), dEq);
+            % Scatter-add to bins (thread-safe with OpenMP REDUCTION(+:dE))
+            dE(kj) = dE(kj) + dEk;
+            dE(pj) = dE(pj) + dEp;
+            dE(qj) = dE(qj) + dEq;
 
             maxTriadEnergyResidual = max(maxTriadEnergyResidual, abs(dEk+dEp+dEq));
             numTriadsUsed = numTriadsUsed + 1;
@@ -105,14 +114,15 @@ end
 % % CONTRIBUTION 3: q-slices (integrate over k,p for fixed q)
 
 S_NL_E = dE ./ dk;
-FV_total_energy_transfer = sum(S_NL_E .* dk);   % = sum(dE)
+FV_total_energy_transfer = sum(dE);  % Total energy change (should be ~0)
 
 end
 
-% ------------------------------------------------------------
-% Triad energy increment (direct evaluation at (kstar, pstar, qstar))
+% ============================================================================
+% HELPER FUNCTION: Triad energy increment
+% ============================================================================
+% Direct evaluation at (kstar, pstar, qstar)
 % Returns ENERGY increments (already multiplied by dv and Jacobians).
-% ------------------------------------------------------------
 function [dEk,dEp,dEq] = triad_energy_increment_direct(kstar, pstar, qstar, dv, edges, E0_at)
 
 % Fallback to bin centers if centroids are invalid
@@ -154,16 +164,9 @@ dEq = Jq * Sq * dv;
 
 % Final exact-zero projection (kills roundoff at triad level)
 s = dEk + dEp + dEq;
-dEk = dEk - s/3;
-dEp = dEp - s/3;
-dEq = dEq - s/3;
+dEk = dEk - s/3.0;
+dEp = dEp - s/3.0;
+dEq = dEq - s/3.0;
 
-end
-
-function [sum_new, c_new] = kahan_add(sum_old, c_old, x)
-y = x - c_old;
-t = sum_old + y;
-c_new = (t - sum_old) - y;
-sum_new = t;
 end
 
