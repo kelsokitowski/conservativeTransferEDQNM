@@ -118,8 +118,15 @@ function [weight_k, centroidX_k, centroidY_k, weight_p, centroidX_p, centroidY_p
                     weight_p(i,j,k) = dv(i,j,k) / dk(k);  % All use 3rd index!
                     weight_q(i,j,k) = dv(i,j,k) / dk(k);
 
-                    % For p-slice and q-slice, use bin centers (FV approximation)
-                    % p-slice at (qj,kj,pj): 1st=q, 2nd=k, 3rd=p
+                    % Fill bin centers for all locations where weight > 0
+                    % (geometric centroids already filled where computed)
+                    if centroidX_k(i,j,k) == 0
+                        centroidX_k(i,j,k) = kVals(i);
+                    end
+                    if centroidY_k(i,j,k) == 0
+                        centroidY_k(i,j,k) = kVals(j);
+                    end
+
                     if centroidX_p(i,j,k) == 0
                         centroidX_p(i,j,k) = kVals(i);
                     end
@@ -127,7 +134,6 @@ function [weight_k, centroidX_k, centroidY_k, weight_p, centroidX_p, centroidY_p
                         centroidY_p(i,j,k) = kVals(j);
                     end
 
-                    % q-slice at (kj,pj,qj): 1st=k, 2nd=p, 3rd=q
                     if centroidX_q(i,j,k) == 0
                         centroidX_q(i,j,k) = kVals(i);
                     end
