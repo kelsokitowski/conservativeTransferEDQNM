@@ -1,8 +1,6 @@
 function [S_NL_ISO, S_NL_DIR, S_NL_POL, ST_NL_ISO, ST_NL_DIR, SF_NL, diagnostics] = ...
     transfer_scatter_add_anisotropic(kVals, edges, E, ET, EF, HPOL, HDIR, HT, ...
                                      weight_k, centroidX_k, centroidY_k, ...
-                                     weight_p, centroidX_p, centroidY_p, ...
-                                     weight_q, centroidX_q, centroidY_q, ...
                                      mu1, mu3, nu, D, t, t0)
 % transfer_scatter_add_anisotropic: Full anisotropic EDQNM transfer computation
 %
@@ -16,37 +14,23 @@ function [S_NL_ISO, S_NL_DIR, S_NL_POL, ST_NL_ISO, ST_NL_DIR, SF_NL, diagnostics
 %
 % All 6 computed in single k-slice loop for efficiency and parallelizability.
 %
+% K-SLICE INTEGRATION: Integrates each triad once via k-slice.
+% Cyclic symmetry of the integration domain ensures correctness.
+% Delta correction at each triad enforces local energy conservation.
+%
 % PARALLELIZATION STRATEGY (OpenMP/MPI):
-%
-% APPROACH 1 - Thread-local arrays (best for OpenMP):
-%   Allocate 6 separate dE_local arrays per thread, accumulate with Kahan,
-%   then combine all thread-local arrays at the end.
-%
-%   !$OMP PARALLEL PRIVATE(pj,qj,wk,dv_local,pstar,qstar, &
-%   !$OMP                  dE_iso_local, dE_dir_local, ..., cE_*)
-%   allocate(dE_iso_local(kLength), cE_iso_local(kLength), ...)
-%   !$OMP DO SCHEDULE(dynamic)
-%   do kj = 1, kLength
-%       ... compute all 6 contributions ...
-%   end do
-%   !$OMP END DO
-%   !$OMP CRITICAL
-%   ... combine thread-local arrays ...
-%   !$OMP END CRITICAL
-%   !$OMP END PARALLEL
-%
-% APPROACH 2 - MPI domain decomposition:
-%   Each MPI rank computes all 6 transfers for a range of kj indices.
-%   No global reduction needed - each rank owns its kj bins.
+%   - Parallelize outer loop over kj
+%   - Each thread maintains 6 separate dE_local arrays with Kahan compensation
+%   - Combine thread-local arrays at end using Kahan summation
 %
 % Inputs:
-%   kVals, edges          - Wavenumber grid
-%   E, ET, EF             - Energy spectra (E, scalar, flux)
-%   HPOL, HDIR, HT        - Anisotropy coefficients
-%   weight_k, centroids   - FV integration weights and centroids
-%   mu1, mu3              - Eddy damping coefficients
-%   nu, D                 - Viscosity and diffusivity
-%   t, t0                 - Integration time and reference time
+%   kVals, edges          - Wavenumber grid (kLength x 1)
+%   E, ET, EF             - Energy spectra (kLength x 1)
+%   HPOL, HDIR, HT        - Anisotropy coefficients (kLength x 1)
+%   weight_k, centroids   - FV integration weights and centroids (kLength x kLength x kLength)
+%   mu1, mu3              - Eddy damping coefficients (kLength x 1)
+%   nu, D                 - Viscosity and diffusivity (scalars)
+%   t, t0                 - Integration time and reference time (scalars)
 %
 % Outputs:
 %   S_NL_ISO, S_NL_DIR, S_NL_POL - Energy transfer rates (kLength x 1)
@@ -72,14 +56,6 @@ t0    = double(t0);
 weight_k    = double(weight_k);
 centroidX_k = double(centroidX_k);
 centroidY_k = double(centroidY_k);
-
-weight_p    = double(weight_p);
-centroidX_p = double(centroidX_p);
-centroidY_p = double(centroidY_p);
-
-weight_q    = double(weight_q);
-centroidX_q = double(centroidX_q);
-centroidY_q = double(centroidY_q);
 
 kLength = length(kVals);
 dk = diff(edges(:));
@@ -110,7 +86,7 @@ mu3s = max(mu3, realmin);
 logmu1 = log(mu1s);
 logmu3 = log(mu3s);
 
-% Energy increment accumulators (6 separate arrays)
+% Energy increment accumulators (6 separate arrays with Kahan compensation)
 dE_iso = zeros(kLength,1);  cE_iso = zeros(kLength,1);
 dE_dir = zeros(kLength,1);  cE_dir = zeros(kLength,1);
 dE_pol = zeros(kLength,1);  cE_pol = zeros(kLength,1);
@@ -227,7 +203,7 @@ diagnostics.maxTriadResidual_F = maxTriadResidual_F;
 end
 
 % ============================================================================
-% HELPER FUNCTION: Compute all 6 triad increments
+% MAIN COMPUTATION: All 6 triad increments
 % ============================================================================
 function [dEk_iso, dEp_iso, dEq_iso, ...
           dEk_dir, dEp_dir, dEq_dir, ...
@@ -251,12 +227,12 @@ if ~(isfinite(kstar) && isreal(kstar) && kstar>0)
     error('Invalid kstar: %g', kstar);
 end
 
-% Triad geometry: cosines of angles
+% Triad geometry: SAME for all legs (fixed k, p, q configuration)
 k = kstar; p = pstar; q = qstar;
 k2 = k^2; p2 = p^2; q2 = q^2;
-x = (k2 + p2 - q2) / (2*k*p);
-y = (k2 + q2 - p2) / (2*k*q);
-z = (p2 + q2 - k2) / (2*p*q);
+x = (k2 + p2 - q2) / (2*k*p);  % cos(angle between k and p)
+y = (k2 + q2 - p2) / (2*k*q);  % cos(angle between k and q)
+z = (p2 + q2 - k2) / (2*p*q);  % cos(angle between p and q)
 
 % Interpolate all spectral quantities at triad centroids
 E0k = interp_log(k, logk, logE0);
@@ -266,6 +242,14 @@ E0q = interp_log(q, logk, logE0);
 E0Tk = interp_log(k, logk, logE0T);
 E0Tp = interp_log(p, logk, logE0T);
 E0Tq = interp_log(q, logk, logE0T);
+
+% Reconstruct E, ET from E0, E0T
+Ek = 4*pi*k2*E0k;
+Ep = 4*pi*p2*E0p;
+Eq = 4*pi*q2*E0q;
+ETk = 4*pi*k2*E0Tk;
+ETp = 4*pi*p2*E0Tp;
+ETq = 4*pi*q2*E0Tq;
 
 EFk = interp_log(k, logk, logEF);
 EFp = interp_log(p, logk, logEF);
@@ -291,315 +275,377 @@ mu3_k = interp_log(k, logk, logmu3);
 mu3_p = interp_log(p, logk, logmu3);
 mu3_q = interp_log(q, logk, logmu3);
 
-% Compute theta functions (three variants)
+% Compute theta functions
 theta_val = theta(nu, k, p, q, kj, pj, qj, t, mu1_k, mu1_p, mu1_q);
 thetaT_val = thetaT(nu, D, k, p, q, t-t0, mu3_q);
 thetaF_kpq = thetaF(nu, D, k, p, q, t-t0, mu3_p, mu3_q);
 thetaF_pkq = thetaF(nu, D, p, k, q, t-t0, mu3_k, mu3_q);
 
-% Precompute common geometric factors
-xy_z3 = x*y + z^3;
-y2 = y^2;
-z2 = z^2;
-x2 = x^2;
-
 % ============================================================================
 % 1. S_NL_ISO (Isotropic energy transfer)
 % ============================================================================
-% kernel1 = E0q*(E0p-E0k) with cyclic symmetry
-[Sk_iso_raw, Sp_iso_raw, Sq_iso_raw] = compute_S_NL_ISO(...
-    E0k, E0p, E0q, k, p, q, theta_val);
-
-delta_iso = (Sk_iso_raw + Sp_iso_raw + Sq_iso_raw) / 3.0;
-dEk_iso = (Sk_iso_raw - delta_iso) * dv;
-dEp_iso = (Sp_iso_raw - delta_iso) * dv;
-dEq_iso = (Sq_iso_raw - delta_iso) * dv;
-
-% Exact zero projection
-s_iso = dEk_iso + dEp_iso + dEq_iso;
-dEk_iso = dEk_iso - s_iso/3.0;
-dEp_iso = dEp_iso - s_iso/3.0;
-dEq_iso = dEq_iso - s_iso/3.0;
+[dEk_iso, dEp_iso, dEq_iso] = compute_S_NL_ISO(...
+    E0k, E0p, E0q, k, p, q, x, y, z, theta_val, dv);
 
 % ============================================================================
 % 2. S_NL_DIR (Directional anisotropy transfer)
 % ============================================================================
-[Sk_dir_raw, Sp_dir_raw, Sq_dir_raw] = compute_S_NL_DIR(...
+[dEk_dir, dEp_dir, dEq_dir] = compute_S_NL_DIR(...
     E0k, E0p, E0q, HPOLk, HPOLp, HPOLq, HDIRk, HDIRp, HDIRq, ...
-    k, p, q, x, y, z, theta_val);
-
-delta_dir = (Sk_dir_raw + Sp_dir_raw + Sq_dir_raw) / 3.0;
-dEk_dir = (Sk_dir_raw - delta_dir) * dv;
-dEp_dir = (Sp_dir_raw - delta_dir) * dv;
-dEq_dir = (Sq_dir_raw - delta_dir) * dv;
-
-s_dir = dEk_dir + dEp_dir + dEq_dir;
-dEk_dir = dEk_dir - s_dir/3.0;
-dEp_dir = dEp_dir - s_dir/3.0;
-dEq_dir = dEq_dir - s_dir/3.0;
+    k, p, q, x, y, z, theta_val, dv);
 
 % ============================================================================
 % 3. S_NL_POL (Poloidal anisotropy transfer)
 % ============================================================================
-[Sk_pol_raw, Sp_pol_raw, Sq_pol_raw] = compute_S_NL_POL(...
+[dEk_pol, dEp_pol, dEq_pol] = compute_S_NL_POL(...
     E0k, E0p, E0q, HPOLk, HPOLp, HPOLq, HDIRk, HDIRp, HDIRq, ...
-    k, p, q, x, y, z, theta_val);
-
-delta_pol = (Sk_pol_raw + Sp_pol_raw + Sq_pol_raw) / 3.0;
-dEk_pol = (Sk_pol_raw - delta_pol) * dv;
-dEp_pol = (Sp_pol_raw - delta_pol) * dv;
-dEq_pol = (Sq_pol_raw - delta_pol) * dv;
-
-s_pol = dEk_pol + dEp_pol + dEq_pol;
-dEk_pol = dEk_pol - s_pol/3.0;
-dEp_pol = dEp_pol - s_pol/3.0;
-dEq_pol = dEq_pol - s_pol/3.0;
+    k, p, q, x, y, z, theta_val, dv);
 
 % ============================================================================
 % 4. ST_NL_ISO (Scalar isotropic transfer)
 % ============================================================================
-% Reconstruct E from E0: E = 4*pi*k^2*E0
-Ek = 4*pi*k2*E0k;
-Ep = 4*pi*p2*E0p;
-Eq = 4*pi*q2*E0q;
-
-[STk_iso_raw, STp_iso_raw, STq_iso_raw] = compute_ST_NL_ISO(...
-    Ek, Ep, Eq, E0Tk, E0Tp, E0Tq, k, p, q, thetaT_val);
-
-delta_T_iso = (STk_iso_raw + STp_iso_raw + STq_iso_raw) / 3.0;
-dETk_iso = (STk_iso_raw - delta_T_iso) * dv;
-dETp_iso = (STp_iso_raw - delta_T_iso) * dv;
-dETq_iso = (STq_iso_raw - delta_T_iso) * dv;
-
-s_T_iso = dETk_iso + dETp_iso + dETq_iso;
-dETk_iso = dETk_iso - s_T_iso/3.0;
-dETp_iso = dETp_iso - s_T_iso/3.0;
-dETq_iso = dETq_iso - s_T_iso/3.0;
+[dETk_iso, dETp_iso, dETq_iso] = compute_ST_NL_ISO(...
+    Ek, Ep, Eq, k, p, q, E0Tk, E0Tp, E0Tq, k2, p2, y, thetaT_val, dv);
 
 % ============================================================================
 % 5. ST_NL_DIR (Scalar directional transfer)
 % ============================================================================
-[STk_dir_raw, STp_dir_raw, STq_dir_raw] = compute_ST_NL_DIR(...
-    E0Tk, E0Tp, E0Tq, E0k, E0p, E0q, ...
+[dETk_dir, dETp_dir, dETq_dir] = compute_ST_NL_DIR(...
+    E0k, E0p, E0q, E0Tk, E0Tp, E0Tq, ...
     HPOLk, HPOLp, HPOLq, HDIRk, HDIRp, HDIRq, HTk, HTp, HTq, ...
-    k, p, q, x, y, z, thetaT_val);
-
-delta_T_dir = (STk_dir_raw + STp_dir_raw + STq_dir_raw) / 3.0;
-dETk_dir = (STk_dir_raw - delta_T_dir) * dv;
-dETp_dir = (STp_dir_raw - delta_T_dir) * dv;
-dETq_dir = (STq_dir_raw - delta_T_dir) * dv;
-
-s_T_dir = dETk_dir + dETp_dir + dETq_dir;
-dETk_dir = dETk_dir - s_T_dir/3.0;
-dETp_dir = dETp_dir - s_T_dir/3.0;
-dETq_dir = dETq_dir - s_T_dir/3.0;
+    k, p, q, k2, p2, q2, x, y, z, thetaT_val, dv);
 
 % ============================================================================
 % 6. SF_NL (Flux transfer)
 % ============================================================================
-[SFk_raw, SFp_raw, SFq_raw] = compute_SF_NL(...
+[dEFk, dEFp, dEFq] = compute_SF_NL(...
     EFk, EFp, EFq, E0k, E0p, E0q, ...
-    k, p, q, x, y, z, thetaF_kpq, thetaF_pkq);
-
-delta_F = (SFk_raw + SFp_raw + SFq_raw) / 3.0;
-dEFk = (SFk_raw - delta_F) * dv;
-dEFp = (SFp_raw - delta_F) * dv;
-dEFq = (SFq_raw - delta_F) * dv;
-
-s_F = dEFk + dEFp + dEFq;
-dEFk = dEFk - s_F/3.0;
-dEFp = dEFp - s_F/3.0;
-dEFq = dEFq - s_F/3.0;
+    k, p, q, k2, x, y, z, thetaF_kpq, thetaF_pkq, dv);
 
 end
 
 % ============================================================================
-% KERNEL COMPUTATION FUNCTIONS
+% 1. S_NL_ISO
 % ============================================================================
-
-function [Sk_raw, Sp_raw, Sq_raw] = compute_S_NL_ISO(E0k, E0p, E0q, k, p, q, theta_val)
+function [dEk, dEp, dEq] = compute_S_NL_ISO(E0k, E0p, E0q, k, p, q, x, y, z, theta_val, dv)
 % S_NL_ISO: theta * 16*pi^2 * p^2*k^2*q * (xy+z^3) * kernel1b
-% where kernel1b = E0(pj)*(E0(qj)-E0(kj))
+% kernel1b = E0(pj)*(E0(qj)-E0(kj)) with cyclic permutations
 
-k2 = k^2; p2 = p^2; q2 = q^2;
-x = (k2 + p2 - q2) / (2*k*p);
-y = (k2 + q2 - p2) / (2*k*q);
-z = (p2 + q2 - k2) / (2*p*q);
+geom = theta_val * 16.0 * pi^2 * p^2 * k^2 * q * (x*y + z^3);
 
-geom_factor = theta_val * 16.0 * pi^2 * p2 * k2 * q * (x*y + z^3);
+% k-leg: 0.5*(E0q*(E0p-E0k) + E0p*(E0q-E0k))
+Sk_raw = geom * 0.5 * (E0q*(E0p-E0k) + E0p*(E0q-E0k));
 
-% k-leg: 0.5*(kernel1(E0q, E0p, E0k) + kernel1(E0p, E0q, E0k))
-term1_k = E0q * (E0p - E0k);
-term2_k = E0p * (E0q - E0k);
-Sk_raw = geom_factor * 0.5 * (term1_k + term2_k);
+% p-leg: 0.5*(E0k*(E0q-E0p) + E0q*(E0k-E0p))
+Sp_raw = geom * 0.5 * (E0k*(E0q-E0p) + E0q*(E0k-E0p));
 
-% p-leg: 0.5*(kernel1(E0k, E0q, E0p) + kernel1(E0q, E0k, E0p))
-term1_p = E0k * (E0q - E0p);
-term2_p = E0q * (E0k - E0p);
-Sp_raw = geom_factor * 0.5 * (term1_p + term2_p);
+% q-leg: 0.5*(E0k*(E0p-E0q) + E0p*(E0k-E0q))
+Sq_raw = geom * 0.5 * (E0k*(E0p-E0q) + E0p*(E0k-E0q));
 
-% q-leg: 0.5*(kernel1(E0k, E0p, E0q) + kernel1(E0p, E0k, E0q))
-term1_q = E0k * (E0p - E0q);
-term2_q = E0p * (E0k - E0q);
-Sq_raw = geom_factor * 0.5 * (term1_q + term2_q);
+% Delta correction and exact zero projection
+delta = (Sk_raw + Sp_raw + Sq_raw) / 3.0;
+dEk = (Sk_raw - delta) * dv;
+dEp = (Sp_raw - delta) * dv;
+dEq = (Sq_raw - delta) * dv;
+s = dEk + dEp + dEq;
+dEk = dEk - s/3.0;
+dEp = dEp - s/3.0;
+dEq = dEq - s/3.0;
 end
 
-function [Sk_raw, Sp_raw, Sq_raw] = compute_S_NL_DIR(...
+% ============================================================================
+% 2. S_NL_DIR
+% ============================================================================
+function [dEk, dEp, dEq] = compute_S_NL_DIR(...
     E0k, E0p, E0q, HPOLk, HPOLp, HPOLq, HDIRk, HDIRp, HDIRq, ...
-    k, p, q, x, y, z, theta_val)
-% S_NL_DIR computation
-% Sum of two parts with different geometric factors
+    k, p, q, x, y, z, theta_val, dv)
+% S_NL_DIR with kernels 21-25
 
 k2 = k^2; p2 = p^2; q2 = q^2;
+y2 = y^2; z2 = z^2;
 xy_z3 = x*y + z^3;
-y2 = y^2;
-z2 = z^2;
 
-% k-leg contributions
-% Part 1: kernel21, kernel22
-kernel21_term1 = E0q * (E0p - E0k) * HPOLq;
-kernel21_term2 = E0p * (E0q - E0k) * HPOLp;
-kernel22_term1 = E0q * E0p * HPOLp;
-kernel22_term2 = E0p * E0q * HPOLq;
+% k-leg kernels (original spectral ordering)
+kernel21_k = 0.5 * (E0q*(E0p-E0k)*HPOLq + E0p*(E0q-E0k)*HPOLp);
+kernel22_k = 0.5 * (E0q*E0p*HPOLp + E0p*E0q*HPOLq);
+kernel23_k = 0.5 * (E0q*(E0p-E0k)*HDIRq + E0p*(E0q-E0k)*HDIRp);
+kernel24_k = 0.5 * (E0q*E0p*HDIRp + E0p*E0q*HDIRq);
+kernel25_k = 0.5 * (E0q*E0k*HDIRk + E0p*E0k*HDIRk);
 
-Sk_part1 = theta_val * 4.0 * pi^2 * p2 * k2 * q * (...
-    (y2 - 1.0) * xy_z3 * 0.5*(kernel21_term1 + kernel21_term2) + ...
-    z * (1.0 - z2)^2 * 0.5*(kernel22_term1 + kernel22_term2));
+Sk_raw = theta_val * 4.0 * pi^2 * p2 * k2 * q * (...
+    (y2 - 1.0) * xy_z3 * kernel21_k + ...
+    z * (1.0 - z2)^2 * kernel22_k) + ...
+    theta_val * 8.0 * pi^2 * p2 * k2 * q * xy_z3 * (...
+    (3.0*y2 - 1.0) * kernel23_k + ...
+    (3.0*z2 - 1.0) * kernel24_k - ...
+    2.0 * kernel25_k);
 
-% Part 2: kernel23, kernel24, kernel25
-kernel23_term1 = E0q * (E0p - E0k) * HDIRq;
-kernel23_term2 = E0p * (E0q - E0k) * HDIRp;
-kernel24_term1 = E0q * E0p * HDIRp;
-kernel24_term2 = E0p * E0q * HDIRq;
-kernel25_term1 = E0q * E0k * HDIRk;
-kernel25_term2 = E0p * E0k * HDIRk;
+% p-leg kernels (cyclic permutation: k→p, p→q, q→k)
+kernel21_p = 0.5 * (E0k*(E0q-E0p)*HPOLk + E0q*(E0k-E0p)*HPOLq);
+kernel22_p = 0.5 * (E0k*E0q*HPOLq + E0q*E0k*HPOLk);
+kernel23_p = 0.5 * (E0k*(E0q-E0p)*HDIRk + E0q*(E0k-E0p)*HDIRq);
+kernel24_p = 0.5 * (E0k*E0q*HDIRq + E0q*E0k*HDIRk);
+kernel25_p = 0.5 * (E0k*E0p*HDIRp + E0q*E0p*HDIRp);
 
-Sk_part2 = theta_val * 8.0 * pi^2 * p2 * k2 * q * xy_z3 * (...
-    (3.0*y2 - 1.0) * 0.5*(kernel23_term1 + kernel23_term2) + ...
-    (3.0*z2 - 1.0) * 0.5*(kernel24_term1 + kernel24_term2) - ...
-    2.0 * 0.5*(kernel25_term1 + kernel25_term2));
+Sp_raw = theta_val * 4.0 * pi^2 * p2 * k2 * q * (...
+    (y2 - 1.0) * xy_z3 * kernel21_p + ...
+    z * (1.0 - z2)^2 * kernel22_p) + ...
+    theta_val * 8.0 * pi^2 * p2 * k2 * q * xy_z3 * (...
+    (3.0*y2 - 1.0) * kernel23_p + ...
+    (3.0*z2 - 1.0) * kernel24_p - ...
+    2.0 * kernel25_p);
 
-Sk_raw = Sk_part1 + Sk_part2;
+% q-leg kernels (cyclic permutation: k→q, p→k, q→p)
+kernel21_q = 0.5 * (E0p*(E0k-E0q)*HPOLp + E0k*(E0p-E0q)*HPOLk);
+kernel22_q = 0.5 * (E0p*E0k*HPOLk + E0k*E0p*HPOLp);
+kernel23_q = 0.5 * (E0p*(E0k-E0q)*HDIRp + E0k*(E0p-E0q)*HDIRk);
+kernel24_q = 0.5 * (E0p*E0k*HDIRk + E0k*E0p*HDIRp);
+kernel25_q = 0.5 * (E0p*E0q*HDIRq + E0k*E0q*HDIRq);
 
-% p-leg and q-leg: Apply cyclic permutations
-% (Similar structure, need to permute k→p→q→k)
-% For brevity, implement simplified version - full version needs careful permutation
-Sp_raw = 0.0;  % TODO: Implement full cyclic permutation
-Sq_raw = 0.0;  % TODO: Implement full cyclic permutation
+Sq_raw = theta_val * 4.0 * pi^2 * p2 * k2 * q * (...
+    (y2 - 1.0) * xy_z3 * kernel21_q + ...
+    z * (1.0 - z2)^2 * kernel22_q) + ...
+    theta_val * 8.0 * pi^2 * p2 * k2 * q * xy_z3 * (...
+    (3.0*y2 - 1.0) * kernel23_q + ...
+    (3.0*z2 - 1.0) * kernel24_q - ...
+    2.0 * kernel25_q);
+
+% Delta correction and exact zero projection
+delta = (Sk_raw + Sp_raw + Sq_raw) / 3.0;
+dEk = (Sk_raw - delta) * dv;
+dEp = (Sp_raw - delta) * dv;
+dEq = (Sq_raw - delta) * dv;
+s = dEk + dEp + dEq;
+dEk = dEk - s/3.0;
+dEp = dEp - s/3.0;
+dEq = dEq - s/3.0;
 end
 
-function [Sk_raw, Sp_raw, Sq_raw] = compute_S_NL_POL(...
+% ============================================================================
+% 3. S_NL_POL
+% ============================================================================
+function [dEk, dEp, dEq] = compute_S_NL_POL(...
     E0k, E0p, E0q, HPOLk, HPOLp, HPOLq, HDIRk, HDIRp, HDIRq, ...
-    k, p, q, x, y, z, theta_val)
-% S_NL_POL computation
-
-k2 = k^2; p2 = p^2; q2 = q^2;
-xy_z3 = x*y + z^3;
-y2 = y^2;
-z2 = z^2;
-
-% kernel31-37 contributions
-kernel31 = E0q * E0p * HPOLp;
-kernel32 = E0q * E0k * HPOLk;
-kernel33 = E0q * (E0p - E0k) * HPOLq;
-kernel34 = E0q * E0p * HPOLp;
-kernel35 = E0q * E0k * HPOLq;
-kernel36 = E0q * (E0p - E0k) * HDIRq;
-kernel37 = E0q * E0p * HDIRp;
-
-Sk_part1 = theta_val * 4.0 * pi^2 * p2 * k2 * q * (...
-    xy_z3 * ((1.0 + z2) * kernel31 - 4.0 * kernel32) + ...
-    z * (z2 - 1.0) * (1.0 + y2) * kernel33 + ...
-    2.0 * z * (z2 - y2) * kernel34 + ...
-    2.0 * y * x * (z2 - 1.0) * kernel35);
-
-Sk_part2 = theta_val * 24.0 * pi^2 * p2 * k2 * q * z * (z2 - 1.0) * (...
-    (y2 - 1.0) * kernel36 + (z2 - 1.0) * kernel37);
-
-Sk_raw = Sk_part1 + Sk_part2;
-
-% Cyclic permutations for p, q legs
-Sp_raw = 0.0;  % TODO: Implement
-Sq_raw = 0.0;  % TODO: Implement
-end
-
-function [STk_raw, STp_raw, STq_raw] = compute_ST_NL_ISO(...
-    Ek, Ep, Eq, E0Tk, E0Tp, E0Tq, k, p, q, thetaT_val)
-% ST_NL_ISO: thetaT * k/p/q * (1-y^2) * kernel4
-% where kernel4 = Eq * (k^2*E0T(p) - p^2*E0T(k))
-
-k2 = k^2; p2 = p^2; q2 = q^2;
-y = (k2 + q2 - p2) / (2*k*q);
-
-geom_factor = thetaT_val * k / (p*q) * (1.0 - y^2);
-
-% k-leg
-kernel4_k = Eq * (k2 * E0Tp - p2 * E0Tk);
-STk_raw = geom_factor * kernel4_k;
-
-% Cyclic permutations
-STp_raw = 0.0;  % TODO: Implement
-STq_raw = 0.0;  % TODO: Implement
-end
-
-function [STk_raw, STp_raw, STq_raw] = compute_ST_NL_DIR(...
-    E0Tk, E0Tp, E0Tq, E0k, E0p, E0q, ...
-    HPOLk, HPOLp, HPOLq, HDIRk, HDIRp, HDIRq, HTk, HTp, HTq, ...
-    k, p, q, x, y, z, thetaT_val)
-% ST_NL_DIR computation
+    k, p, q, x, y, z, theta_val, dv)
+% S_NL_POL with kernels 31-37
 
 k2 = k^2; p2 = p^2;
-xy_z = x*y + z;
-y2 = y^2;
-z2 = z^2;
+y2 = y^2; z2 = z^2;
+xy_z3 = x*y + z^3;
 
-% kernel51-54
-kernel51 = E0q * (E0Tp - E0Tk) * HPOLq;
-kernel52 = E0q * (E0Tp - E0Tk) * HDIRq;
-kernel53 = E0q * E0Tp * HTp;
-kernel54 = E0q * 2.0 * E0Tk * HTk;
+% k-leg kernels
+kernel31_k = 0.5 * (E0q*E0p*HPOLp + E0p*E0q*HPOLq);
+kernel32_k = 0.5 * (E0q*E0k*HPOLk + E0p*E0k*HPOLk);
+kernel33_k = 0.5 * (E0q*(E0p-E0k)*HPOLq + E0p*(E0q-E0k)*HPOLp);
+kernel34_k = kernel31_k;  % Same as kernel31
+kernel35_k = 0.5 * (E0q*E0k*HPOLq + E0p*E0k*HPOLp);
+kernel36_k = 0.5 * (E0q*(E0p-E0k)*HDIRq + E0p*(E0q-E0k)*HDIRp);
+kernel37_k = 0.5 * (E0q*E0p*HDIRp + E0p*E0q*HDIRq);
 
-Sk_part1 = 4.0 * thetaT_val * pi^2 * k2 * p2 * q * xy_z * (y2 - 1.0) * kernel51;
-Sk_part2 = 8.0 * thetaT_val * pi^2 * k2 * p2 * q * xy_z * (3.0*y2 - 1.0) * kernel52;
-Sk_part3 = 8.0 * thetaT_val * pi^2 * k2 * p2 * q * xy_z * ((3.0*z2 - 1.0) * kernel53 - kernel54);
+Sk_raw = theta_val * 4.0 * pi^2 * p2 * k2 * q * (...
+    xy_z3 * ((1.0 + z2) * kernel31_k - 4.0 * kernel32_k) + ...
+    z * (z2 - 1.0) * (1.0 + y2) * kernel33_k + ...
+    2.0 * z * (z2 - y2) * kernel34_k + ...
+    2.0 * y * x * (z2 - 1.0) * kernel35_k) + ...
+    theta_val * 24.0 * pi^2 * p2 * k2 * q * z * (z2 - 1.0) * (...
+    (y2 - 1.0) * kernel36_k + (z2 - 1.0) * kernel37_k);
 
-STk_raw = Sk_part1 + Sk_part2 + Sk_part3;
+% p-leg kernels (cyclic permutation)
+kernel31_p = 0.5 * (E0k*E0q*HPOLq + E0q*E0k*HPOLk);
+kernel32_p = 0.5 * (E0k*E0p*HPOLp + E0q*E0p*HPOLp);
+kernel33_p = 0.5 * (E0k*(E0q-E0p)*HPOLk + E0q*(E0k-E0p)*HPOLq);
+kernel34_p = kernel31_p;
+kernel35_p = 0.5 * (E0k*E0p*HPOLk + E0q*E0p*HPOLq);
+kernel36_p = 0.5 * (E0k*(E0q-E0p)*HDIRk + E0q*(E0k-E0p)*HDIRq);
+kernel37_p = 0.5 * (E0k*E0q*HDIRq + E0q*E0k*HDIRk);
 
-STp_raw = 0.0;  % TODO: Implement
-STq_raw = 0.0;  % TODO: Implement
+Sp_raw = theta_val * 4.0 * pi^2 * p2 * k2 * q * (...
+    xy_z3 * ((1.0 + z2) * kernel31_p - 4.0 * kernel32_p) + ...
+    z * (z2 - 1.0) * (1.0 + y2) * kernel33_p + ...
+    2.0 * z * (z2 - y2) * kernel34_p + ...
+    2.0 * y * x * (z2 - 1.0) * kernel35_p) + ...
+    theta_val * 24.0 * pi^2 * p2 * k2 * q * z * (z2 - 1.0) * (...
+    (y2 - 1.0) * kernel36_p + (z2 - 1.0) * kernel37_p);
+
+% q-leg kernels (cyclic permutation)
+kernel31_q = 0.5 * (E0p*E0k*HPOLk + E0k*E0p*HPOLp);
+kernel32_q = 0.5 * (E0p*E0q*HPOLq + E0k*E0q*HPOLq);
+kernel33_q = 0.5 * (E0p*(E0k-E0q)*HPOLp + E0k*(E0p-E0q)*HPOLk);
+kernel34_q = kernel31_q;
+kernel35_q = 0.5 * (E0p*E0q*HPOLp + E0k*E0q*HPOLk);
+kernel36_q = 0.5 * (E0p*(E0k-E0q)*HDIRp + E0k*(E0p-E0q)*HDIRk);
+kernel37_q = 0.5 * (E0p*E0k*HDIRk + E0k*E0p*HDIRp);
+
+Sq_raw = theta_val * 4.0 * pi^2 * p2 * k2 * q * (...
+    xy_z3 * ((1.0 + z2) * kernel31_q - 4.0 * kernel32_q) + ...
+    z * (z2 - 1.0) * (1.0 + y2) * kernel33_q + ...
+    2.0 * z * (z2 - y2) * kernel34_q + ...
+    2.0 * y * x * (z2 - 1.0) * kernel35_q) + ...
+    theta_val * 24.0 * pi^2 * p2 * k2 * q * z * (z2 - 1.0) * (...
+    (y2 - 1.0) * kernel36_q + (z2 - 1.0) * kernel37_q);
+
+% Delta correction and exact zero projection
+delta = (Sk_raw + Sp_raw + Sq_raw) / 3.0;
+dEk = (Sk_raw - delta) * dv;
+dEp = (Sp_raw - delta) * dv;
+dEq = (Sq_raw - delta) * dv;
+s = dEk + dEp + dEq;
+dEk = dEk - s/3.0;
+dEp = dEp - s/3.0;
+dEq = dEq - s/3.0;
 end
 
-function [SFk_raw, SFp_raw, SFq_raw] = compute_SF_NL(...
+% ============================================================================
+% 4. ST_NL_ISO
+% ============================================================================
+function [dETk, dETp, dETq] = compute_ST_NL_ISO(...
+    Ek, Ep, Eq, k, p, q, E0Tk, E0Tp, E0Tq, k2, p2, y, thetaT_val, dv)
+% ST_NL_ISO: thetaT * k/p/q * (1-y^2) * kernel4
+% kernel4 = Eq * (k^2*E0T(p) - p^2*E0T(k))
+
+geom = thetaT_val * k / (p*q) * (1.0 - y^2);
+q2 = q^2;
+
+% k-leg: Eq * (k^2*E0Tp - p^2*E0Tk)
+STk_raw = geom * Eq * (k2*E0Tp - p2*E0Tk);
+
+% p-leg (cyclic): Ek * (p^2*E0Tq - q^2*E0Tp)
+STp_raw = geom * Ek * (p2*E0Tq - q2*E0Tp);
+
+% q-leg (cyclic): Ep * (q^2*E0Tk - k^2*E0Tq)
+STq_raw = geom * Ep * (q2*E0Tk - k2*E0Tq);
+
+% Delta correction and exact zero projection
+delta = (STk_raw + STp_raw + STq_raw) / 3.0;
+dETk = (STk_raw - delta) * dv;
+dETp = (STp_raw - delta) * dv;
+dETq = (STq_raw - delta) * dv;
+s = dETk + dETp + dETq;
+dETk = dETk - s/3.0;
+dETp = dETp - s/3.0;
+dETq = dETq - s/3.0;
+end
+
+% ============================================================================
+% 5. ST_NL_DIR
+% ============================================================================
+function [dETk, dETp, dETq] = compute_ST_NL_DIR(...
+    E0k, E0p, E0q, E0Tk, E0Tp, E0Tq, ...
+    HPOLk, HPOLp, HPOLq, HDIRk, HDIRp, HDIRq, HTk, HTp, HTq, ...
+    k, p, q, k2, p2, q2, x, y, z, thetaT_val, dv)
+% ST_NL_DIR with kernels 51-54
+
+y2 = y^2; z2 = z^2;
+xy_z = x*y + z;
+
+% k-leg kernels
+kernel51_k = 0.5 * (E0q*(E0Tp-E0Tk)*HPOLq + E0p*(E0Tq-E0Tk)*HPOLp);
+kernel52_k = 0.5 * (E0q*(E0Tp-E0Tk)*HDIRq + E0p*(E0Tq-E0Tk)*HDIRp);
+kernel53_k = 0.5 * (E0q*E0Tp*HTp + E0p*E0Tq*HTq);
+kernel54_k = 0.5 * (E0q*2.0*E0Tk*HTk + E0p*2.0*E0Tk*HTk);
+
+STk_raw = 4.0 * thetaT_val * pi^2 * k2 * p2 * q * xy_z * (y2 - 1.0) * kernel51_k + ...
+    8.0 * thetaT_val * pi^2 * k2 * p2 * q * xy_z * (3.0*y2 - 1.0) * kernel52_k + ...
+    8.0 * thetaT_val * pi^2 * k2 * p2 * q * xy_z * ((3.0*z2 - 1.0) * kernel53_k - kernel54_k);
+
+% p-leg kernels (cyclic permutation: k→p, p→q, q→k)
+kernel51_p = 0.5 * (E0k*(E0Tq-E0Tp)*HPOLk + E0q*(E0Tk-E0Tp)*HPOLq);
+kernel52_p = 0.5 * (E0k*(E0Tq-E0Tp)*HDIRk + E0q*(E0Tk-E0Tp)*HDIRq);
+kernel53_p = 0.5 * (E0k*E0Tq*HTq + E0q*E0Tk*HTk);
+kernel54_p = 0.5 * (E0k*2.0*E0Tp*HTp + E0q*2.0*E0Tp*HTp);
+
+STp_raw = 4.0 * thetaT_val * pi^2 * k2 * p2 * q * xy_z * (y2 - 1.0) * kernel51_p + ...
+    8.0 * thetaT_val * pi^2 * k2 * p2 * q * xy_z * (3.0*y2 - 1.0) * kernel52_p + ...
+    8.0 * thetaT_val * pi^2 * k2 * p2 * q * xy_z * ((3.0*z2 - 1.0) * kernel53_p - kernel54_p);
+
+% q-leg kernels (cyclic permutation: k→q, p→k, q→p)
+kernel51_q = 0.5 * (E0p*(E0Tk-E0Tq)*HPOLp + E0k*(E0Tp-E0Tq)*HPOLk);
+kernel52_q = 0.5 * (E0p*(E0Tk-E0Tq)*HDIRp + E0k*(E0Tp-E0Tq)*HDIRk);
+kernel53_q = 0.5 * (E0p*E0Tk*HTk + E0k*E0Tp*HTp);
+kernel54_q = 0.5 * (E0p*2.0*E0Tq*HTq + E0k*2.0*E0Tq*HTq);
+
+STq_raw = 4.0 * thetaT_val * pi^2 * k2 * p2 * q * xy_z * (y2 - 1.0) * kernel51_q + ...
+    8.0 * thetaT_val * pi^2 * k2 * p2 * q * xy_z * (3.0*y2 - 1.0) * kernel52_q + ...
+    8.0 * thetaT_val * pi^2 * k2 * p2 * q * xy_z * ((3.0*z2 - 1.0) * kernel53_q - kernel54_q);
+
+% Delta correction and exact zero projection
+delta = (STk_raw + STp_raw + STq_raw) / 3.0;
+dETk = (STk_raw - delta) * dv;
+dETp = (STp_raw - delta) * dv;
+dETq = (STq_raw - delta) * dv;
+s = dETk + dETp + dETq;
+dETk = dETk - s/3.0;
+dETp = dETp - s/3.0;
+dETq = dETq - s/3.0;
+end
+
+% ============================================================================
+% 6. SF_NL
+% ============================================================================
+function [dEFk, dEFp, dEFq] = compute_SF_NL(...
     EFk, EFp, EFq, E0k, E0p, E0q, ...
-    k, p, q, x, y, z, thetaF_kpq, thetaF_pkq)
-% SF_NL computation
+    k, p, q, k2, x, y, z, thetaF_kpq, thetaF_pkq, dv)
+% SF_NL with kernels 61-66
 
-k2 = k^2;
-y2 = y^2;
-z2 = z^2;
-y3 = y2 * y;
+y2 = y^2; z2 = z^2; y3 = y2*y;
 
-% kernel61-66
-kernel61 = E0p * EFq;
-kernel62 = E0p * EFk;
-kernel63 = E0k * EFp;
-kernel64 = E0k * EFq;
-kernel65 = E0q * EFp;
-kernel66 = E0q * EFk;
+% k-leg kernels
+kernel61_k = E0p*EFq;
+kernel62_k = E0p*EFk;
+kernel63_k = E0k*EFp;
+kernel64_k = E0k*EFq;
+kernel65_k = E0q*EFp;
+kernel66_k = E0q*EFk;
 
-SFk_part1 = 4.0 * pi^2 * thetaF_kpq * k2 * p * q * (...
-    k * kernel61 * (1.0 + y2 - z2 - x*y*z - 2.0*y2*z2) - ...
-    2.0 * q * (y3 + x*z) * kernel62);
+SFk_raw = 4.0 * pi^2 * thetaF_kpq * k2 * p * q * (...
+    k * kernel61_k * (1.0 + y2 - z2 - x*y*z - 2.0*y2*z2) - ...
+    2.0 * q * (y3 + x*z) * kernel62_k) + ...
+    4.0 * pi^2 * thetaF_pkq * k2 * p * q * (...
+    q * z * (2.0*x*y2 + y*z - x) * kernel63_k - ...
+    p * y * (x + y*z) * kernel64_k + ...
+    k * ((1.0 - y2 + z2 - x*y*z - 2.0*y2*z2) * kernel65_k - 2.0*(1.0 - y2) * kernel66_k));
 
-SFk_part2 = 4.0 * pi^2 * thetaF_pkq * k2 * p * q * (...
-    q * z * (2.0*x*y2 + y*z - x) * kernel63 - ...
-    p * y * (x + y*z) * kernel64 + ...
-    k * ((1.0 - y2 + z2 - x*y*z - 2.0*y2*z2) * kernel65 - 2.0*(1.0 - y2) * kernel66));
+% p-leg kernels (cyclic permutation: k→p, p→q, q→k)
+kernel61_p = E0q*EFk;
+kernel62_p = E0q*EFp;
+kernel63_p = E0p*EFq;
+kernel64_p = E0p*EFk;
+kernel65_p = E0k*EFq;
+kernel66_p = E0k*EFp;
 
-SFk_raw = SFk_part1 + SFk_part2;
+SFp_raw = 4.0 * pi^2 * thetaF_kpq * k2 * p * q * (...
+    p * kernel61_p * (1.0 + y2 - z2 - x*y*z - 2.0*y2*z2) - ...
+    2.0 * k * (y3 + x*z) * kernel62_p) + ...
+    4.0 * pi^2 * thetaF_pkq * k2 * p * q * (...
+    k * z * (2.0*x*y2 + y*z - x) * kernel63_p - ...
+    q * y * (x + y*z) * kernel64_p + ...
+    p * ((1.0 - y2 + z2 - x*y*z - 2.0*y2*z2) * kernel65_p - 2.0*(1.0 - y2) * kernel66_p));
 
-SFp_raw = 0.0;  % TODO: Implement
-SFq_raw = 0.0;  % TODO: Implement
+% q-leg kernels (cyclic permutation: k→q, p→k, q→p)
+kernel61_q = E0k*EFp;
+kernel62_q = E0k*EFq;
+kernel63_q = E0q*EFk;
+kernel64_q = E0q*EFp;
+kernel65_q = E0p*EFk;
+kernel66_q = E0p*EFq;
+
+SFq_raw = 4.0 * pi^2 * thetaF_kpq * k2 * p * q * (...
+    q * kernel61_q * (1.0 + y2 - z2 - x*y*z - 2.0*y2*z2) - ...
+    2.0 * p * (y3 + x*z) * kernel62_q) + ...
+    4.0 * pi^2 * thetaF_pkq * k2 * p * q * (...
+    p * z * (2.0*x*y2 + y*z - x) * kernel63_q - ...
+    k * y * (x + y*z) * kernel64_q + ...
+    q * ((1.0 - y2 + z2 - x*y*z - 2.0*y2*z2) * kernel65_q - 2.0*(1.0 - y2) * kernel66_q));
+
+% Delta correction and exact zero projection
+delta = (SFk_raw + SFp_raw + SFq_raw) / 3.0;
+dEFk = (SFk_raw - delta) * dv;
+dEFp = (SFp_raw - delta) * dv;
+dEFq = (SFq_raw - delta) * dv;
+s = dEFk + dEFp + dEFq;
+dEFk = dEFk - s/3.0;
+dEFp = dEFp - s/3.0;
+dEFq = dEFq - s/3.0;
 end
 
 % ============================================================================
@@ -619,30 +665,6 @@ logk_eval = log(k_eval);
 sign_interp = interp1(logk, signval, logk_eval, 'linear', 'extrap');
 logval_interp = interp1(logk, logval, logk_eval, 'linear', 'extrap');
 val = sign_interp * exp(logval_interp);
-end
-
-% ============================================================================
-% THETA FUNCTIONS
-% ============================================================================
-
-function thetaVal = theta(nu, k, p, q, kj, pj, qj, t, mu1_k, mu1_p, mu1_q)
-% EDQNM theta relaxation function (velocity)
-damping = nu*(k^2 + p^2 + q^2) + mu1_k + mu1_p + mu1_q;
-thetaVal = (1.0 - exp(-damping*t)) / damping;
-end
-
-function thetaTVal = thetaT(nu, D, k, p, q, t_rel, mu3_q)
-% Scalar theta function
-% TODO: Implement correct formula (placeholder)
-damping = (nu + D)*(k^2 + p^2 + q^2) + mu3_q;
-thetaTVal = (1.0 - exp(-damping*t_rel)) / damping;
-end
-
-function thetaFVal = thetaF(nu, D, k, p, q, t_rel, mu3_1, mu3_2)
-% Flux theta function
-% TODO: Implement correct formula (placeholder)
-damping = (nu + D)*(k^2 + p^2 + q^2) + mu3_1 + mu3_2;
-thetaFVal = (1.0 - exp(-damping*t_rel)) / damping;
 end
 
 % ============================================================================
