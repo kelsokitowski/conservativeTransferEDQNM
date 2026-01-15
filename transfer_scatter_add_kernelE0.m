@@ -198,21 +198,25 @@ term2_q = kernel1(E0p, E0k, E0q, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, p
 Sq_raw = 0.5 * (term1_q + term2_q);
 
 % Jacobians at evaluation points
-Jk = 4*pi*kstar^2;
-Jp = 4*pi*pstar^2;
-Jq = 4*pi*qstar^2;
+% Jk = 4*pi*kstar^2;
+% Jp = 4*pi*pstar^2;
+% Jq = 4*pi*qstar^2;
+Jk = 1; Jp = 1; Jq = 1;
 
 % Energy-conserving delta correction
-delta = (Jk*Sk_raw + Jp*Sp_raw + Jq*Sq_raw) / (Jk + Jp + Jq);
+%delta = (Jk*Sk_raw + Jp*Sp_raw + Jq*Sq_raw) / (Jk + Jp + Jq);
+delta = (Sk_raw + Sp_raw + Sq_raw) / (3.0);
 
 Sk = Sk_raw - delta;
 Sp = Sp_raw - delta;
 Sq = Sq_raw - delta;
 
 % Energy increments
-dEk = Jk * Sk * dv;
-dEp = Jp * Sp * dv;
-dEq = Jq * Sq * dv;
+
+
+dEk = Sk * dv;
+dEp = Sp * dv;
+dEq = Sq * dv;
 
 % Final exact-zero projection (kills roundoff at triad level)
 s = dEk + dEp + dEq;
@@ -271,6 +275,7 @@ thetaVal = theta(nu, k, p, q, kj, pj, qj, t, mu1_k, mu1_p, mu1_q);
 % Geometry: 16*pi^2 * p^2*k^2*q * (xy+z^3)
 % Spectral: E0_a*(E0_b-E0_c)
 kernel1Val = thetaVal * 16.0 * pi^2 * p^2 * k^2 * q * (x*y + z^3) * E0_a * (E0_b - E0_c);
+%kernel1Val = E0_a*(E0_b-E0_c);
 
 end
 

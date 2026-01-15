@@ -133,7 +133,7 @@ mu1 = A1 * mu;
 mu3 = A3 * mu;  % For future use
 
 % Integration time (eddy turnover time scale)
-t_edqnm = TauL0;  % Use large eddy turnover time
+t_edqnm = 1000;  % Use large eddy turnover time
 
 [S_NL_E, FV_total_energy_transfer, maxTriadEnergyResidual, numTriadsUsed] = transfer_scatter_add_kernelE0(kVals, edges, E, weight_k, CxVals_k, CyVals_k, weight_p, CxVals_p, CyVals_p, weight_q, CxVals_q, CyVals_q, mu1, nu, t_edqnm);
 fprintf('FV total energy transfer = %.20e\n', FV_total_energy_transfer);
