@@ -5,14 +5,15 @@ function [S_NL_E, FV_total_energy_transfer, maxTriadEnergyResidual, numTriadsUse
 % The cyclic symmetry of dv (verified externally) ensures geometric correctness.
 % Delta correction at each triad enforces local energy conservation.
 %
-% PARALLELIZATION: The kj loop is parallelizable via OpenMP in Fortran 90:
+% PARALLELIZATION NOTE: The kj loop structure supports parallelization, but
+% Kahan summation (needed for precision) complicates direct OpenMP REDUCTION.
+% For Fortran 90, consider:
+%   1. Use thread-local dE arrays, sum after parallel region
+%   2. Accept loss of Kahan precision for parallel speedup
+%   3. Use higher precision (real*16) if available
+% Basic OpenMP structure (without Kahan):
 %   !$OMP PARALLEL DO PRIVATE(pj,qj,wk,dv_local,pstar,qstar,dEk,dEp,dEq) &
-%   !$OMP             REDUCTION(+:dE) REDUCTION(MAX:maxTriadEnergyResidual) &
-%   !$OMP             REDUCTION(+:numTriadsUsed) SCHEDULE(dynamic)
-%   do kj = 1, kLength
-%       ...
-%   end do
-%   !$OMP END PARALLEL DO
+%   !$OMP             REDUCTION(+:dE) SCHEDULE(dynamic)
 %
 % Outputs:
 %   S_NL_E                    - Energy transfer rate (kLength x 1)
@@ -47,8 +48,10 @@ logk  = log(kVals);
 logE0 = log(E0s);
 E0_at = @(x) exp(interp1(logk, logE0, log(x), 'linear', 'extrap'));
 
-% Energy increment accumulators (thread-safe with OpenMP REDUCTION)
+% Energy increment accumulators
+% Note: Kahan summation needed for precision when accumulating ~60k triads
 dE = zeros(kLength,1);
+cE = zeros(kLength,1);  % Kahan compensation
 
 % Diagnostic scalars (thread-safe with OpenMP REDUCTION)
 numTriadsUsed = 0;
@@ -73,10 +76,10 @@ for kj = 1:kLength
 
             [dEk,dEp,dEq] = triad_energy_increment_direct(kstar, pstar, qstar, dv_local, edges, E0_at);
 
-            % Scatter-add to bins (thread-safe with OpenMP REDUCTION(+:dE))
-            dE(kj) = dE(kj) + dEk;
-            dE(pj) = dE(pj) + dEp;
-            dE(qj) = dE(qj) + dEq;
+            % Scatter-add to bins using Kahan summation for precision
+            [dE(kj), cE(kj)] = kahan_add(dE(kj), cE(kj), dEk);
+            [dE(pj), cE(pj)] = kahan_add(dE(pj), cE(pj), dEp);
+            [dE(qj), cE(qj)] = kahan_add(dE(qj), cE(qj), dEq);
 
             maxTriadEnergyResidual = max(maxTriadEnergyResidual, abs(dEk+dEp+dEq));
             numTriadsUsed = numTriadsUsed + 1;
@@ -168,5 +171,17 @@ dEk = dEk - s/3.0;
 dEp = dEp - s/3.0;
 dEq = dEq - s/3.0;
 
+end
+
+% ============================================================================
+% HELPER FUNCTION: Kahan summation
+% ============================================================================
+% Compensated summation for improved numerical accuracy
+% See: Kahan, W. (1965). "Further remarks on reducing truncation errors"
+function [sum_new, c_new] = kahan_add(sum_old, c_old, x)
+y = x - c_old;
+t = sum_old + y;
+c_new = (t - sum_old) - y;
+sum_new = t;
 end
 
