@@ -122,10 +122,17 @@ end
 fprintf('A_k min/max = %g  %g\n', min(A_k), max(A_k));
 
 % EDQNM parameters
-% mu1: eddy damping rate (needs to be computed from E and other parameters)
-% For now, use placeholder - replace with actual EDQNM calculation
-mu1 = nu * kVals.^2;  % Placeholder: linear viscous damping
-% t: integration time (eddy turnover time scale)
+% Constants from EDQNM theory
+A1 = 0.355;  % mu1 coefficient
+A3 = 1.3;    % mu3 coefficient (for later use)
+
+% Compute eddy damping rate mu from energy spectrum
+% mu(k) = sqrt( integral from 0 to k of p^2*E(p) dp )
+mu = getMu(E, kVals);
+mu1 = A1 * mu;
+mu3 = A3 * mu;  % For future use
+
+% Integration time (eddy turnover time scale)
 t_edqnm = TauL0;  % Use large eddy turnover time
 
 [S_NL_E, FV_total_energy_transfer, maxTriadEnergyResidual, numTriadsUsed] = transfer_scatter_add_kernelE0(kVals, edges, E, weight_k, CxVals_k, CyVals_k, weight_p, CxVals_p, CyVals_p, weight_q, CxVals_q, CyVals_q, mu1, nu, t_edqnm);
