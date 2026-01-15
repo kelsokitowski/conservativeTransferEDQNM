@@ -181,10 +181,21 @@ mu1_k = interpolate_mu1(kstar, logk, logmu1);
 mu1_p = interpolate_mu1(pstar, logk, logmu1);
 mu1_q = interpolate_mu1(qstar, logk, logmu1);
 
-% Compute EDQNM kernel for each leg
-Sk_raw = kernel1(E0k, E0p, E0q, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
-Sp_raw = kernel1(E0p, E0q, E0k, pstar, qstar, kstar, mu1_p, mu1_q, mu1_k, pj, qj, kj, nu, t);
-Sq_raw = kernel1(E0q, E0k, E0p, qstar, kstar, pstar, mu1_q, mu1_k, mu1_p, qj, kj, pj, nu, t);
+% Compute EDQNM kernel for each leg (two terms per leg)
+% k-leg: Sk_raw = 0.5*(term1 + term2)
+term1_k = kernel1(E0q, E0p, E0k, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+term2_k = kernel1(E0p, E0q, E0k, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+Sk_raw = 0.5 * (term1_k + term2_k);
+
+% p-leg: Sp_raw = 0.5*(term1 + term2)
+term1_p = kernel1(E0k, E0q, E0p, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+term2_p = kernel1(E0q, E0k, E0p, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+Sp_raw = 0.5 * (term1_p + term2_p);
+
+% q-leg: Sq_raw = 0.5*(term1 + term2)
+term1_q = kernel1(E0k, E0p, E0q, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+term2_q = kernel1(E0p, E0k, E0q, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+Sq_raw = 0.5 * (term1_q + term2_q);
 
 % Jacobians at evaluation points
 Jk = 4*pi*kstar^2;
@@ -236,12 +247,16 @@ end
 % ============================================================================
 % HELPER FUNCTION: EDQNM kernel (Fortran-compatible)
 % ============================================================================
-% Computes kernel for one leg of the triad
-% kernel1Val = theta * 16*pi^2 * p^2*k^2*q * (xy+z^3) * E0_q*(E0_p-E0_k)
-% where x, y, z are triad geometry cosines
-function kernel1Val = kernel1(E0_k, E0_p, E0_q, k, p, q, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t)
+% Computes one term of EDQNM kernel: theta * 16*pi^2 * p^2*k^2*q * (xy+z^3) * E0_a*(E0_b-E0_c)
+% where:
+%   E0_a, E0_b, E0_c: spectral energy density values (ordered for this term)
+%   k, p, q: triad wavenumbers (always kstar, pstar, qstar - for geometry)
+%   mu1_k, mu1_p, mu1_q: eddy damping at k, p, q (always in k,p,q order)
+%   kj, pj, qj: bin indices (always in k,p,q order)
+%   nu, t: viscosity and integration time
+function kernel1Val = kernel1(E0_a, E0_b, E0_c, k, p, q, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t)
 
-% Triad geometry: cosines of angles
+% Triad geometry: cosines of angles (computed from k, p, q wavenumbers)
 % x = cos(angle between k and p) = (k^2 + p^2 - q^2)/(2*k*p)
 % y = cos(angle between k and q) = (k^2 + q^2 - p^2)/(2*k*q)
 % z = cos(angle between p and q) = (p^2 + q^2 - k^2)/(2*p*q)
@@ -249,11 +264,13 @@ x = (k^2 + p^2 - q^2) / (2*k*p);
 y = (k^2 + q^2 - p^2) / (2*k*q);
 z = (p^2 + q^2 - k^2) / (2*p*q);
 
-% Theta relaxation function
+% Theta relaxation function (uses k, p, q wavenumbers)
 thetaVal = theta(nu, k, p, q, kj, pj, qj, t, mu1_k, mu1_p, mu1_q);
 
-% Full EDQNM kernel
-kernel1Val = thetaVal * 16.0 * pi^2 * p^2 * k^2 * q * (x*y + z^3) * E0_q * (E0_p - E0_k);
+% Full EDQNM kernel term
+% Geometry: 16*pi^2 * p^2*k^2*q * (xy+z^3)
+% Spectral: E0_a*(E0_b-E0_c)
+kernel1Val = thetaVal * 16.0 * pi^2 * p^2 * k^2 * q * (x*y + z^3) * E0_a * (E0_b - E0_c);
 
 end
 
