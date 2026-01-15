@@ -187,6 +187,19 @@ term1_k = kernel1(E0q, E0p, E0k, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, p
 term2_k = kernel1(E0p, E0q, E0k, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
 Sk_raw = 0.5 * (term1_k + term2_k);
 
+% Diagnostic: print first few triads to check magnitudes
+persistent triad_count;
+if isempty(triad_count), triad_count = 0; end
+triad_count = triad_count + 1;
+if triad_count <= 5
+    thetaVal_test = theta(nu, kstar, pstar, qstar, kj, pj, qj, t, mu1_k, mu1_p, mu1_q);
+    damping_rate = nu*(kstar^2 + pstar^2 + qstar^2) + mu1_k + mu1_p + mu1_q;
+    fprintf('Triad %d: kj=%d pj=%d qj=%d | k=%.3e p=%.3e q=%.3e\n', triad_count, kj, pj, qj, kstar, pstar, qstar);
+    fprintf('  E0: k=%.3e p=%.3e q=%.3e | mu1: k=%.3e p=%.3e q=%.3e\n', E0k, E0p, E0q, mu1_k, mu1_p, mu1_q);
+    fprintf('  theta=%.3e damping=%.3e t=%.3e nu=%.3e\n', thetaVal_test, damping_rate, t, nu);
+    fprintf('  term1_k=%.3e term2_k=%.3e Sk_raw=%.3e | dv=%.3e\n', term1_k, term2_k, Sk_raw, dv);
+end
+
 % p-leg: Sp_raw = 0.5*(term1 + term2)
 term1_p = kernel1(E0k, E0q, E0p, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
 term2_p = kernel1(E0q, E0k, E0p, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
@@ -268,6 +281,7 @@ thetaVal = theta(nu, k, p, q, kj, pj, qj, t, mu1_k, mu1_p, mu1_q);
 % Full EDQNM kernel term
 % Geometry: 16*pi^2 * p^2*k^2*q * (xy+z^3)
 % Spectral: E0_a*(E0_b-E0_c)
+% TODO: Check if 16*pi^2 needs normalization for E vs E0 formulation
 kernel1Val = thetaVal * 16.0 * pi^2 * p^2 * k^2 * q * (x*y + z^3) * E0_a * (E0_b - E0_c);
 
 end
