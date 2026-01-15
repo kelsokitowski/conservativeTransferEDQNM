@@ -201,7 +201,7 @@ Sq_raw = 0.5 * (term1_q + term2_q);
 % Jk = 4*pi*kstar^2;
 % Jp = 4*pi*pstar^2;
 % Jq = 4*pi*qstar^2;
-Jk = 1; Jp = 1; Jq = 1;
+%Jk = 1; Jp = 1; Jq = 1;
 
 % Energy-conserving delta correction
 %delta = (Jk*Sk_raw + Jp*Sp_raw + Jq*Sq_raw) / (Jk + Jp + Jq);
