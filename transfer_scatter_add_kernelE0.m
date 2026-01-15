@@ -5,14 +5,38 @@ function [S_NL_E, FV_total_energy_transfer, maxTriadEnergyResidual, numTriadsUse
 % The cyclic symmetry of dv (verified externally) ensures geometric correctness.
 % Delta correction at each triad enforces local energy conservation.
 %
-% PARALLELIZATION: The kj loop is parallelizable via OpenMP in Fortran 90:
-%   !$OMP PARALLEL DO PRIVATE(pj,qj,wk,dv_local,pstar,qstar,dEk,dEp,dEq) &
-%   !$OMP             REDUCTION(+:dE) REDUCTION(MAX:maxTriadEnergyResidual) &
-%   !$OMP             REDUCTION(+:numTriadsUsed) SCHEDULE(dynamic)
+% PARALLELIZATION STRATEGY (OpenMP/MPI):
+%
+% Each kj can be computed independently. Two approaches:
+%
+% APPROACH 1 - Thread-local arrays (best for OpenMP):
+%   Allocate dE_local(kLength) per thread, accumulate locally with Kahan,
+%   then combine all thread-local arrays at the end with Kahan summation.
+%   This preserves full precision.
+%
+%   !$OMP PARALLEL PRIVATE(pj,qj,wk,dv_local,pstar,qstar,dEk,dEp,dEq, &
+%   !$OMP                  dE_local,cE_local)
+%   allocate(dE_local(kLength), cE_local(kLength))
+%   dE_local = 0.0; cE_local = 0.0
+%   !$OMP DO SCHEDULE(dynamic)
 %   do kj = 1, kLength
-%       ...
+%       ... compute contributions, add to dE_local using kahan_add ...
 %   end do
-%   !$OMP END PARALLEL DO
+%   !$OMP END DO
+%   !$OMP CRITICAL
+%   do kj = 1, kLength
+%       call kahan_add(dE(kj), cE(kj), dE_local(kj), ...)
+%   end do
+%   !$OMP END CRITICAL
+%   deallocate(dE_local, cE_local)
+%   !$OMP END PARALLEL
+%
+% APPROACH 2 - MPI domain decomposition (best for distributed memory):
+%   Each MPI rank computes S_NL_E for a range of kj indices:
+%     rank r handles kj = kj_start(r) to kj_end(r)
+%   Each rank returns its local S_NL_E(kj_start:kj_end).
+%   No global reduction needed - each rank owns its kj bins.
+%   Near-linear scaling up to kLength ranks.
 %
 % Outputs:
 %   S_NL_E                    - Energy transfer rate (kLength x 1)
@@ -40,15 +64,16 @@ kLength = length(kVals);
 dk = diff(edges(:));
 krep = sqrt(edges(1:end-1).*edges(2:end));  % FV reps
 
-% Kernel variable
+% Precompute E0 interpolation data (read-only, thread-safe)
 E0  = E ./ (4*pi*kVals.^2);
 E0s = max(E0, realmin);
 logk  = log(kVals);
 logE0 = log(E0s);
-E0_at = @(x) exp(interp1(logk, logE0, log(x), 'linear', 'extrap'));
 
-% Energy increment accumulators (thread-safe with OpenMP REDUCTION)
+% Energy increment accumulators
+% Note: Kahan summation needed for precision when accumulating ~60k triads
 dE = zeros(kLength,1);
+cE = zeros(kLength,1);  % Kahan compensation
 
 % Diagnostic scalars (thread-safe with OpenMP REDUCTION)
 numTriadsUsed = 0;
@@ -71,12 +96,12 @@ for kj = 1:kLength
             pstar = centroidX_k(pj,qj,kj);
             qstar = centroidY_k(pj,qj,kj);
 
-            [dEk,dEp,dEq] = triad_energy_increment_direct(kstar, pstar, qstar, dv_local, edges, E0_at);
+            [dEk,dEp,dEq] = triad_energy_increment_direct(kstar, pstar, qstar, dv_local, logk, logE0);
 
-            % Scatter-add to bins (thread-safe with OpenMP REDUCTION(+:dE))
-            dE(kj) = dE(kj) + dEk;
-            dE(pj) = dE(pj) + dEp;
-            dE(qj) = dE(qj) + dEq;
+            % Scatter-add to bins using Kahan summation for precision
+            [dE(kj), cE(kj)] = kahan_add(dE(kj), cE(kj), dEk);
+            [dE(pj), cE(pj)] = kahan_add(dE(pj), cE(pj), dEp);
+            [dE(qj), cE(qj)] = kahan_add(dE(qj), cE(qj), dEq);
 
             maxTriadEnergyResidual = max(maxTriadEnergyResidual, abs(dEk+dEp+dEq));
             numTriadsUsed = numTriadsUsed + 1;
@@ -123,7 +148,7 @@ end
 % ============================================================================
 % Direct evaluation at (kstar, pstar, qstar)
 % Returns ENERGY increments (already multiplied by dv and Jacobians).
-function [dEk,dEp,dEq] = triad_energy_increment_direct(kstar, pstar, qstar, dv, edges, E0_at)
+function [dEk,dEp,dEq] = triad_energy_increment_direct(kstar, pstar, qstar, dv, logk, logE0)
 
 % Fallback to bin centers if centroids are invalid
 if ~(isfinite(pstar) && isreal(pstar) && pstar>0)
@@ -136,9 +161,9 @@ if ~(isfinite(kstar) && isreal(kstar) && kstar>0)
     error('Invalid kstar: %g', kstar);
 end
 
-E0k = E0_at(kstar);
-E0p = E0_at(pstar);
-E0q = E0_at(qstar);
+E0k = interpolate_E0(kstar, logk, logE0);
+E0p = interpolate_E0(pstar, logk, logE0);
+E0q = interpolate_E0(qstar, logk, logE0);
 
 % Raw 3-leg kernel in E0 (toy kernel)
 Sk_raw = 0.5*( E0q*(E0p-E0k) + E0p*(E0q-E0k) );
@@ -168,5 +193,28 @@ dEk = dEk - s/3.0;
 dEp = dEp - s/3.0;
 dEq = dEq - s/3.0;
 
+end
+
+% ============================================================================
+% HELPER FUNCTION: E0 interpolation (Fortran-compatible)
+% ============================================================================
+% Log-log linear interpolation of E0
+% In Fortran: implement as a function that searches logk array and interpolates
+function E0_val = interpolate_E0(k_eval, logk, logE0)
+logk_eval = log(k_eval);
+logE0_interp = interp1(logk, logE0, logk_eval, 'linear', 'extrap');
+E0_val = exp(logE0_interp);
+end
+
+% ============================================================================
+% HELPER FUNCTION: Kahan summation
+% ============================================================================
+% Compensated summation for improved numerical accuracy
+% See: Kahan, W. (1965). "Further remarks on reducing truncation errors"
+function [sum_new, c_new] = kahan_add(sum_old, c_old, x)
+y = x - c_old;
+t = sum_old + y;
+c_new = (t - sum_old) - y;
+sum_new = t;
 end
 
