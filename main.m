@@ -121,7 +121,14 @@ for kj=1:length(kVals)
 end
 fprintf('A_k min/max = %g  %g\n', min(A_k), max(A_k));
 
-[S_NL_E, FV_total_energy_transfer, maxTriadEnergyResidual, numTriadsUsed] = transfer_scatter_add_kernelE0(kVals, edges, E, weight_k, CxVals_k, CyVals_k, weight_p, CxVals_p, CyVals_p, weight_q, CxVals_q, CyVals_q);
+% EDQNM parameters
+% mu1: eddy damping rate (needs to be computed from E and other parameters)
+% For now, use placeholder - replace with actual EDQNM calculation
+mu1 = nu * kVals.^2;  % Placeholder: linear viscous damping
+% t: integration time (eddy turnover time scale)
+t_edqnm = TauL0;  % Use large eddy turnover time
+
+[S_NL_E, FV_total_energy_transfer, maxTriadEnergyResidual, numTriadsUsed] = transfer_scatter_add_kernelE0(kVals, edges, E, weight_k, CxVals_k, CyVals_k, weight_p, CxVals_p, CyVals_p, weight_q, CxVals_q, CyVals_q, mu1, nu, t_edqnm);
 fprintf('FV total energy transfer = %.20e\n', FV_total_energy_transfer);
 fprintf('max triad energy residual = %.20e\n', maxTriadEnergyResidual);
 fprintf('triads used = %d\n', numTriadsUsed);

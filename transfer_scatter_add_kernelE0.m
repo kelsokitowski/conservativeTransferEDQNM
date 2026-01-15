@@ -1,9 +1,12 @@
-function [S_NL_E, FV_total_energy_transfer, maxTriadEnergyResidual, numTriadsUsed] = transfer_scatter_add_kernelE0(kVals, edges, E, weight_k, centroidX_k, centroidY_k, weight_p, centroidX_p, centroidY_p, weight_q, centroidX_q, centroidY_q)
+function [S_NL_E, FV_total_energy_transfer, maxTriadEnergyResidual, numTriadsUsed] = transfer_scatter_add_kernelE0(kVals, edges, E, weight_k, centroidX_k, centroidY_k, weight_p, centroidX_p, centroidY_p, weight_q, centroidX_q, centroidY_q, mu1, nu, t)
 % transfer_scatter_add_kernelE0 (K-SLICE INTEGRATION)
 %
 % Integrates over k-slices only: each triad integrated once with proper volume weighting.
 % The cyclic symmetry of dv (verified externally) ensures geometric correctness.
 % Delta correction at each triad enforces local energy conservation.
+%
+% EDQNM Kernel: theta * 16*pi^2 * p^2*k^2*q * (xy+z^3) * E0q*(E0p-E0k)
+% where theta includes relaxation time dynamics
 %
 % PARALLELIZATION STRATEGY (OpenMP/MPI):
 %
@@ -47,6 +50,9 @@ function [S_NL_E, FV_total_energy_transfer, maxTriadEnergyResidual, numTriadsUse
 kVals = double(kVals(:));
 edges = double(edges(:));
 E     = double(E(:));
+mu1   = double(mu1(:));
+nu    = double(nu);
+t     = double(t);
 
 weight_k    = double(weight_k);
 centroidX_k = double(centroidX_k);
@@ -64,11 +70,15 @@ kLength = length(kVals);
 dk = diff(edges(:));
 krep = sqrt(edges(1:end-1).*edges(2:end));  % FV reps
 
-% Precompute E0 interpolation data (read-only, thread-safe)
+% Precompute E0 and mu1 interpolation data (read-only, thread-safe)
 E0  = E ./ (4*pi*kVals.^2);
 E0s = max(E0, realmin);
 logk  = log(kVals);
 logE0 = log(E0s);
+
+% mu1 interpolation data (linear in log-log space)
+mu1s = max(mu1, realmin);
+logmu1 = log(mu1s);
 
 % Energy increment accumulators
 % Note: Kahan summation needed for precision when accumulating ~60k triads
@@ -96,7 +106,7 @@ for kj = 1:kLength
             pstar = centroidX_k(pj,qj,kj);
             qstar = centroidY_k(pj,qj,kj);
 
-            [dEk,dEp,dEq] = triad_energy_increment_direct(kstar, pstar, qstar, dv_local, logk, logE0);
+            [dEk,dEp,dEq] = triad_energy_increment_direct(kstar, pstar, qstar, dv_local, kj, pj, qj, logk, logE0, logmu1, nu, t);
 
             % Scatter-add to bins using Kahan summation for precision
             [dE(kj), cE(kj)] = kahan_add(dE(kj), cE(kj), dEk);
@@ -148,9 +158,9 @@ end
 % ============================================================================
 % Direct evaluation at (kstar, pstar, qstar)
 % Returns ENERGY increments (already multiplied by dv and Jacobians).
-function [dEk,dEp,dEq] = triad_energy_increment_direct(kstar, pstar, qstar, dv, logk, logE0)
+function [dEk,dEp,dEq] = triad_energy_increment_direct(kstar, pstar, qstar, dv, kj, pj, qj, logk, logE0, logmu1, nu, t)
 
-% Fallback to bin centers if centroids are invalid
+% Validate centroids
 if ~(isfinite(pstar) && isreal(pstar) && pstar>0)
     error('Invalid pstar: %g', pstar);
 end
@@ -161,14 +171,31 @@ if ~(isfinite(kstar) && isreal(kstar) && kstar>0)
     error('Invalid kstar: %g', kstar);
 end
 
+% Interpolate E0 at triad evaluation points
 E0k = interpolate_E0(kstar, logk, logE0);
 E0p = interpolate_E0(pstar, logk, logE0);
 E0q = interpolate_E0(qstar, logk, logE0);
 
-% Raw 3-leg kernel in E0 (toy kernel)
-Sk_raw = 0.5*( E0q*(E0p-E0k) + E0p*(E0q-E0k) );
-Sq_raw = 0.5*( E0k*(E0p-E0q) + E0p*(E0k-E0q) );
-Sp_raw = 0.5*( E0k*(E0q-E0p) + E0q*(E0k-E0p) );
+% Interpolate mu1 at triad evaluation points
+mu1_k = interpolate_mu1(kstar, logk, logmu1);
+mu1_p = interpolate_mu1(pstar, logk, logmu1);
+mu1_q = interpolate_mu1(qstar, logk, logmu1);
+
+% Compute EDQNM kernel for each leg (two terms per leg)
+% k-leg: Sk_raw = 0.5*(term1 + term2)
+term1_k = kernel1(E0q, E0p, E0k, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+term2_k = kernel1(E0p, E0q, E0k, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+Sk_raw = 0.5 * (term1_k + term2_k);
+
+% p-leg: Sp_raw = 0.5*(term1 + term2)
+term1_p = kernel1(E0k, E0q, E0p, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+term2_p = kernel1(E0q, E0k, E0p, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+Sp_raw = 0.5 * (term1_p + term2_p);
+
+% q-leg: Sq_raw = 0.5*(term1 + term2)
+term1_q = kernel1(E0k, E0p, E0q, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+term2_q = kernel1(E0p, E0k, E0q, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+Sq_raw = 0.5 * (term1_q + term2_q);
 
 % Jacobians at evaluation points
 Jk = 4*pi*kstar^2;
@@ -204,6 +231,47 @@ function E0_val = interpolate_E0(k_eval, logk, logE0)
 logk_eval = log(k_eval);
 logE0_interp = interp1(logk, logE0, logk_eval, 'linear', 'extrap');
 E0_val = exp(logE0_interp);
+end
+
+% ============================================================================
+% HELPER FUNCTION: mu1 interpolation (Fortran-compatible)
+% ============================================================================
+% Log-log linear interpolation of mu1
+% In Fortran: implement as a function that searches logk array and interpolates
+function mu1_val = interpolate_mu1(k_eval, logk, logmu1)
+logk_eval = log(k_eval);
+logmu1_interp = interp1(logk, logmu1, logk_eval, 'linear', 'extrap');
+mu1_val = exp(logmu1_interp);
+end
+
+% ============================================================================
+% HELPER FUNCTION: EDQNM kernel (Fortran-compatible)
+% ============================================================================
+% Computes one term of EDQNM kernel: theta * 16*pi^2 * p^2*k^2*q * (xy+z^3) * E0_a*(E0_b-E0_c)
+% where:
+%   E0_a, E0_b, E0_c: spectral energy density values (ordered for this term)
+%   k, p, q: triad wavenumbers (always kstar, pstar, qstar - for geometry)
+%   mu1_k, mu1_p, mu1_q: eddy damping at k, p, q (always in k,p,q order)
+%   kj, pj, qj: bin indices (always in k,p,q order)
+%   nu, t: viscosity and integration time
+function kernel1Val = kernel1(E0_a, E0_b, E0_c, k, p, q, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t)
+
+% Triad geometry: cosines of angles (computed from k, p, q wavenumbers)
+% x = cos(angle between k and p) = (k^2 + p^2 - q^2)/(2*k*p)
+% y = cos(angle between k and q) = (k^2 + q^2 - p^2)/(2*k*q)
+% z = cos(angle between p and q) = (p^2 + q^2 - k^2)/(2*p*q)
+x = (k^2 + p^2 - q^2) / (2*k*p);
+y = (k^2 + q^2 - p^2) / (2*k*q);
+z = (p^2 + q^2 - k^2) / (2*p*q);
+
+% Theta relaxation function (uses k, p, q wavenumbers)
+thetaVal = theta(nu, k, p, q, kj, pj, qj, t, mu1_k, mu1_p, mu1_q);
+
+% Full EDQNM kernel term
+% Geometry: 16*pi^2 * p^2*k^2*q * (xy+z^3)
+% Spectral: E0_a*(E0_b-E0_c)
+kernel1Val = thetaVal * 16.0 * pi^2 * p^2 * k^2 * q * (x*y + z^3) * E0_a * (E0_b - E0_c);
+
 end
 
 % ============================================================================
