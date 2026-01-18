@@ -374,19 +374,20 @@ dETq_dir = dETq_dir - s/3.0;
 % ============================================================================
 % 6. SF_NL: kernel6
 % ============================================================================
+% ALL arguments fully permuted for each leg
 % k-leg: SFk_raw = 0.5*(kernel6(k,p,q) + kernel6(k,q,p))
-term1_k = kernel6(E0p, E0k, E0q, EFk, EFp, EFq, k, p, q, mu3_p, mu3_q, mu3_k, nu, D, t-t0);
-term2_k = kernel6(E0p, E0k, E0q, EFk, EFq, EFp, k, q, p, mu3_p, mu3_q, mu3_k, nu, D, t-t0);
+term1_k = kernel6(E0q, E0p, E0k, EFq, EFp, EFk, k, p, q, mu3_k, mu3_p, mu3_q, nu, D, t-t0);
+term2_k = kernel6(E0p, E0q, E0k, EFp, EFq, EFk, k, q, p, mu3_k, mu3_q, mu3_p, nu, D, t-t0);
 SFk_raw = 0.5 * (term1_k + term2_k);
 
 % p-leg: SFp_raw = 0.5*(kernel6(p,q,k) + kernel6(p,k,q))
-term1_p = kernel6(E0q, E0p, E0k, EFp, EFq, EFk, p, q, k, mu3_q, mu3_k, mu3_p, nu, D, t-t0);
-term2_p = kernel6(E0q, E0p, E0k, EFp, EFk, EFq, p, k, q, mu3_q, mu3_k, mu3_p, nu, D, t-t0);
+term1_p = kernel6(E0k, E0q, E0p, EFk, EFq, EFp, p, q, k, mu3_p, mu3_q, mu3_k, nu, D, t-t0);
+term2_p = kernel6(E0q, E0k, E0p, EFq, EFk, EFp, p, k, q, mu3_p, mu3_k, mu3_q, nu, D, t-t0);
 SFp_raw = 0.5 * (term1_p + term2_p);
 
 % q-leg: SFq_raw = 0.5*(kernel6(q,k,p) + kernel6(q,p,k))
-term1_q = kernel6(E0k, E0q, E0p, EFq, EFk, EFp, q, k, p, mu3_k, mu3_p, mu3_q, nu, D, t-t0);
-term2_q = kernel6(E0k, E0q, E0p, EFq, EFp, EFk, q, p, k, mu3_k, mu3_p, mu3_q, nu, D, t-t0);
+term1_q = kernel6(E0p, E0k, E0q, EFp, EFk, EFq, q, k, p, mu3_q, mu3_k, mu3_p, nu, D, t-t0);
+term2_q = kernel6(E0k, E0p, E0q, EFk, EFp, EFq, q, p, k, mu3_q, mu3_p, mu3_k, nu, D, t-t0);
 SFq_raw = 0.5 * (term1_q + term2_q);
 
 delta = (SFk_raw + SFp_raw + SFq_raw) / 3.0;
@@ -482,7 +483,7 @@ val = 4.0 * thetaTVal * pi^2 * k^2 * p^2 * q * (x*y + z) * (y^2 - 1.0) * kernel5
 end
 
 % kernel6: SF_NL (Flux transfer)
-function val = kernel6(E0_p, E0_k, E0_q, EF_k, EF_p, EF_q, k, p, q, mu3_p, mu3_q, mu3_k, nu, D, t_rel)
+function val = kernel6(E0_p, E0_q, E0_k, EF_p, EF_q, EF_k, k, p, q, mu3_k, mu3_p, mu3_q, nu, D, t_rel)
 x = (k^2 + p^2 - q^2) / (2*k*p);
 y = (k^2 + q^2 - p^2) / (2*k*q);
 z = (p^2 + q^2 - k^2) / (2*p*q);
@@ -490,12 +491,12 @@ z = (p^2 + q^2 - k^2) / (2*p*q);
 thetaF_1 = thetaF(nu, D, k, p, q, t_rel, mu3_p, mu3_q);
 thetaF_2 = thetaF(nu, D, p, k, q, t_rel, mu3_k, mu3_q);
 
-kernel61 = E0_p * EF_q;
-kernel62 = E0_p * EF_k;
-kernel63 = E0_k * EF_p;
-kernel64 = E0_k * EF_q;
-kernel65 = E0_q * EF_p;
-kernel66 = E0_q * EF_k;
+kernel61 = E0_q * EF_p;
+kernel62 = E0_q * EF_k;
+kernel63 = E0_k * EF_q;
+kernel64 = E0_k * EF_p;
+kernel65 = E0_p * EF_q;
+kernel66 = E0_p * EF_k;
 
 val = 4.0 * pi^2 * thetaF_1 * k^2 * p * q * (...
     k * kernel61 * (1.0 + y^2 - z^2 - x*y*z - 2.0*y^2*z^2) - ...
