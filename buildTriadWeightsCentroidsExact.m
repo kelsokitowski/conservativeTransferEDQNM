@@ -99,6 +99,26 @@ function [weight_k, centroidX_k, centroidY_k, centroidZ_k, weight_p, centroidX_p
                     qc_true = mq / vol;  % q-centroid
                     kc_true = mk / vol;  % k-centroid
 
+                    % Safety check: if k-centroid is invalid, use fallback
+                    % This should not happen if vertex checks work correctly!
+                    if kc_true < kL || kc_true > kU
+                        % Compute valid k-range at (pc_true, qc_true)
+                        k_min_valid = max(kL, abs(pc_true - qc_true));
+                        k_max_valid = min(kU, pc_true + qc_true);
+
+                        if k_min_valid < k_max_valid
+                            % Use midpoint of valid range
+                            kc_true = 0.5 * (k_min_valid + k_max_valid);
+                            fprintf('WARNING: Invalid k-centroid %.6e at (pj=%d,qj=%d,kj=%d), using fallback %.6e\n', ...
+                                    mk/vol, pj, qj, kj, kc_true);
+                        else
+                            % Valid range is empty - use bin center as last resort
+                            kc_true = 0.5 * (kL + kU);
+                            fprintf('ERROR: Empty valid k-range at (pj=%d,qj=%d,kj=%d), using bin center %.6e\n', ...
+                                    pj, qj, kj, kc_true);
+                        end
+                    end
+
                     % Store centroids for k-slice at (pj,qj,kj)
                     centroidX_k(pj,qj,kj) = pc_true;  % p coordinate
                     centroidY_k(pj,qj,kj) = qc_true;  % q coordinate
