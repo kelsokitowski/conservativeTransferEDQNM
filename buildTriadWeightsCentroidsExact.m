@@ -262,6 +262,25 @@ function [dv, mp, mq, mk, px_in, qy_in] = dv_moments_oneCell_exact(kL,kU,pL,pU,q
         pc = Mx / A;
         qc = My / A;
 
+        % Verify that upper > lower at ALL vertices (not just centroid)
+        % since upper and lower are linear functions of (p,q)
+        valid_piece = true;
+        for vi = 1:size(P,1)
+            pv = P(vi,1);
+            qv = P(vi,2);
+            s_v = pv + qv;
+            absd_v = abs(pv - qv);
+            upper_v = min(kU, s_v);
+            lower_v = max(kL, absd_v);
+            if upper_v <= lower_v + 1e-12 * max(abs(kL), abs(kU))
+                valid_piece = false;
+                break;
+            end
+        end
+        if ~valid_piece
+            continue;
+        end
+
         % classify branches at (pc,qc)
         s    = pc + qc;
         d    = pc - qc;
@@ -269,11 +288,6 @@ function [dv, mp, mq, mk, px_in, qy_in] = dv_moments_oneCell_exact(kL,kU,pL,pU,q
 
         upper = min(kU, s);
         lower = max(kL, absd);
-
-        % Skip if k-range is too small (near boundary, numerical issues likely)
-        if upper <= lower + 1e-12 * max(abs(kL), abs(kU))
-            continue;
-        end
 
         upper_is_kU = (kU <= s + 1e-13);
         lower_is_kL = (kL >= absd - 1e-13);
