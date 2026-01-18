@@ -211,6 +211,7 @@ function [dv, mp, mq, mk, px_in, qy_in] = dv_moments_oneCell_exact(kL,kU,pL,pU,q
     lines = [
         1  1  kL;
         1  1  kU;
+        1 -1  0;    % NEW: split on p = q to handle |p-q| correctly
         1 -1  kL;
         1 -1  kU;
         1 -1 -kL;
@@ -269,7 +270,8 @@ function [dv, mp, mq, mk, px_in, qy_in] = dv_moments_oneCell_exact(kL,kU,pL,pU,q
         upper = min(kU, s);
         lower = max(kL, absd);
 
-        if upper <= lower
+        % Skip if k-range is too small (near boundary, numerical issues likely)
+        if upper <= lower + 1e-12 * max(abs(kL), abs(kU))
             continue;
         end
 
