@@ -262,17 +262,23 @@ function [dv, mp, mq, mk, px_in, qy_in] = dv_moments_oneCell_exact(kL,kU,pL,pU,q
         pc = Mx / A;
         qc = My / A;
 
-        % CRITICAL: Check that bin [kL, kU] intersects valid k-range at centroid
-        % The valid k-range at (pc, qc) is [|pc-qc|, pc+qc]
-        % For the piece to contribute valid k-moments, we need:
-        %   kU > |pc-qc|  (bin upper bound exceeds minimum valid k)
-        %   kL < pc+qc    (bin lower bound is below maximum valid k)
-        absd_c = abs(pc - qc);
-        s_c = pc + qc;
-        tol = 1e-10 * max(abs(kL), abs(kU));
-
-        if kU <= absd_c + tol || kL >= s_c - tol
-            % Bin doesn't intersect valid k-range at centroid - skip this piece
+        % CRITICAL: Check that upper > lower at ALL vertices
+        % Since upper and lower are piecewise linear (after splits), they are
+        % either constant or linear within each piece, so extrema occur at vertices
+        % Use relative tolerance based on bin width
+        tol = 1e-10 * (kU - kL);
+        valid_piece = true;
+        for vi = 1:size(P,1)
+            pv = P(vi,1);
+            qv = P(vi,2);
+            upper_v = min(kU, pv + qv);
+            lower_v = max(kL, abs(pv - qv));
+            if upper_v <= lower_v + tol
+                valid_piece = false;
+                break;
+            end
+        end
+        if ~valid_piece
             continue;
         end
 
