@@ -1,4 +1,4 @@
-function [weight_k, centroidX_k, centroidY_k, weight_p, centroidX_p, centroidY_p, weight_q, centroidX_q, centroidY_q, dv, edges] = buildTriadWeightsCentroidsExact(kVals, kmin)
+function [weight_k, centroidX_k, centroidY_k, centroidZ_k, weight_p, centroidX_p, centroidY_p, weight_q, centroidX_q, centroidY_q, dv, edges] = buildTriadWeightsCentroidsExact(kVals, kmin)
 % buildTriadWeightsCentroidsExact (CYCLIC SYMMETRIC VERSION)
 %
 % Computes weights and centroids for all three cyclic permutations:
@@ -33,8 +33,9 @@ function [weight_k, centroidX_k, centroidY_k, weight_p, centroidX_p, centroidY_p
 
     % k-slice: integrate over (p,q) for fixed k
     weight_k   = zeros(N,N,N);
-    centroidX_k = zeros(N,N,N);
-    centroidY_k = zeros(N,N,N);
+    centroidX_k = zeros(N,N,N);  % p-centroid
+    centroidY_k = zeros(N,N,N);  % q-centroid
+    centroidZ_k = zeros(N,N,N);  % k-centroid
 
     % p-slice: integrate over (q,k) for fixed p
     weight_p   = zeros(N,N,N);
@@ -91,15 +92,27 @@ function [weight_k, centroidX_k, centroidY_k, weight_p, centroidX_p, centroidY_p
                         dv(kj,qj,pj) = vol;  % p↔q mirror of 3rd cyclic
                     end
 
+                    % Compute k-centroid at the (p,q) centroid
+                    % k-range at (px_in, qy_in): max(kL, |px_in - qy_in|) to min(kU, px_in + qy_in)
+                    k_lower = max(kL, abs(px_in - qy_in));
+                    k_upper = min(kU, px_in + qy_in);
+                    kz_in = 0.5 * (k_lower + k_upper);  % Midpoint approximation
+
                     % Store centroids for k-slice at (pj,qj,kj) only
                     % These are the actual geometric centroids computed from polygon moments
                     centroidX_k(pj,qj,kj) = px_in;  % p coordinate
                     centroidY_k(pj,qj,kj) = qy_in;  % q coordinate
+                    centroidZ_k(pj,qj,kj) = kz_in;  % k coordinate
 
                     % Mirror p<->q symmetry for k-slice centroids
                     if qj ~= pj
+                        k_lower_mirror = max(kL, abs(qy_in - px_in));
+                        k_upper_mirror = min(kU, qy_in + px_in);
+                        kz_in_mirror = 0.5 * (k_lower_mirror + k_upper_mirror);
+
                         centroidX_k(qj,pj,kj) = qy_in;
                         centroidY_k(qj,pj,kj) = px_in;
+                        centroidZ_k(qj,pj,kj) = kz_in_mirror;
                     end
                 end
             end

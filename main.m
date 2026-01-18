@@ -91,7 +91,7 @@ NotintegerVal = 0.0;
 %mu1 = A1*mu;
 %[weight,ySquaredAvg,triadFlag,outsideCutCell,insideCutCell,CxVals,CyVals,Q11]=midpoint2dShoelace(kVals);
 kmin = 0.01;
-[weight_k, CxVals_k, CyVals_k, weight_p, CxVals_p, CyVals_p, weight_q, CxVals_q, CyVals_q, dv, edges] = buildTriadWeightsCentroidsExact(kVals, kmin);
+[weight_k, CxVals_k, CyVals_k, CzVals_k, weight_p, CxVals_p, CyVals_p, weight_q, CxVals_q, CyVals_q, dv, edges] = buildTriadWeightsCentroidsExact(kVals, kmin);
 
 % Check cyclic symmetry of dv: dv(i,j,k) = dv(j,k,i) = dv(k,i,j)
 cycErr1 = max(abs(dv - permute(dv,[2 3 1])),[],'all');  % (i,j,k) vs (j,k,i)
@@ -135,7 +135,7 @@ mu3 = A3 * mu;  % For future use
 % Integration time (eddy turnover time scale)
 t_edqnm = 1000;  % Use large eddy turnover time
 
-[S_NL_E, FV_total_energy_transfer, maxTriadEnergyResidual, numTriadsUsed] = transfer_scatter_add_kernelE0(kVals, edges, E, weight_k, CxVals_k, CyVals_k, weight_p, CxVals_p, CyVals_p, weight_q, CxVals_q, CyVals_q, mu1, nu, t_edqnm);
+[S_NL_E, FV_total_energy_transfer, maxTriadEnergyResidual, numTriadsUsed] = transfer_scatter_add_kernelE0(kVals, edges, E, weight_k, CxVals_k, CyVals_k, CzVals_k, weight_p, CxVals_p, CyVals_p, weight_q, CxVals_q, CyVals_q, mu1, nu, t_edqnm);
 fprintf('FV total energy transfer = %.20e\n', FV_total_energy_transfer);
 fprintf('max triad energy residual = %.20e\n', maxTriadEnergyResidual);
 fprintf('triads used = %d\n', numTriadsUsed);

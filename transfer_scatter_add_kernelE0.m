@@ -1,4 +1,4 @@
-function [S_NL_E, FV_total_energy_transfer, maxTriadEnergyResidual, numTriadsUsed] = transfer_scatter_add_kernelE0(kVals, edges, E, weight_k, centroidX_k, centroidY_k, weight_p, centroidX_p, centroidY_p, weight_q, centroidX_q, centroidY_q, mu1, nu, t)
+function [S_NL_E, FV_total_energy_transfer, maxTriadEnergyResidual, numTriadsUsed] = transfer_scatter_add_kernelE0(kVals, edges, E, weight_k, centroidX_k, centroidY_k, centroidZ_k, weight_p, centroidX_p, centroidY_p, weight_q, centroidX_q, centroidY_q, mu1, nu, t)
 % transfer_scatter_add_kernelE0 (K-SLICE INTEGRATION)
 %
 % Integrates over k-slices only: each triad integrated once with proper volume weighting.
@@ -93,8 +93,6 @@ maxTriadEnergyResidual = 0.0;
 % K-SLICE LOOP: Parallelizable over kj (see OpenMP directives in header)
 % ===========================================================================
 for kj = 1:kLength
-    kstar = krep(kj);
-
     for pj = 1:kLength
         for qj = pj:kLength
             wk = weight_k(pj,qj,kj);
@@ -102,9 +100,10 @@ for kj = 1:kLength
 
             dv_local = wk * dk(kj);
 
-            % Evaluate kernel at (kstar, pstar, qstar) from k-slice centroids
-            pstar = centroidX_k(pj,qj,kj);
-            qstar = centroidY_k(pj,qj,kj);
+            % Evaluate kernel at 3D centroid (kstar, pstar, qstar) for exact Sk+Sp+Sq=0
+            kstar = centroidZ_k(pj,qj,kj);  % k-centroid
+            pstar = centroidX_k(pj,qj,kj);  % p-centroid
+            qstar = centroidY_k(pj,qj,kj);  % q-centroid
 
             [dEk,dEp,dEq] = triad_energy_increment_direct(kstar, pstar, qstar, dv_local, kj, pj, qj, logk, logE0, logmu1, nu, t);
 
