@@ -99,16 +99,6 @@ function [weight_k, centroidX_k, centroidY_k, centroidZ_k, weight_p, centroidX_p
                     qc_true = mq / vol;  % q-centroid
                     kc_true = mk / vol;  % k-centroid
 
-                    % Debug: check for invalid k-centroid
-                    if kc_true < kL || kc_true > kU
-                        fprintf('ERROR at (pj=%d, qj=%d, kj=%d): k-centroid %.6e outside [%.6e, %.6e]\n', ...
-                                pj, qj, kj, kc_true, kL, kU);
-                        fprintf('  vol=%.6e, mp=%.6e, mq=%.6e, mk=%.6e\n', vol, mp, mq, mk);
-                        fprintf('  pc_true=%.6e, qc_true=%.6e\n', pc_true, qc_true);
-                        fprintf('  Triangle inequality check: |p-q|=%.6e, p+q=%.6e\n', abs(pc_true-qc_true), pc_true+qc_true);
-                        fprintf('  Should have: %.6e < k < %.6e\n', max(kL, abs(pc_true-qc_true)), min(kU, pc_true+qc_true));
-                    end
-
                     % Store centroids for k-slice at (pj,qj,kj)
                     centroidX_k(pj,qj,kj) = pc_true;  % p coordinate
                     centroidY_k(pj,qj,kj) = qc_true;  % q coordinate
@@ -272,22 +262,17 @@ function [dv, mp, mq, mk, px_in, qy_in] = dv_moments_oneCell_exact(kL,kU,pL,pU,q
         pc = Mx / A;
         qc = My / A;
 
-        % Verify that upper > lower at ALL vertices (not just centroid)
-        % since upper and lower are linear functions of (p,q)
-        valid_piece = true;
-        for vi = 1:size(P,1)
-            pv = P(vi,1);
-            qv = P(vi,2);
-            s_v = pv + qv;
-            absd_v = abs(pv - qv);
-            upper_v = min(kU, s_v);
-            lower_v = max(kL, absd_v);
-            if upper_v <= lower_v + 1e-12 * max(abs(kL), abs(kU))
-                valid_piece = false;
-                break;
-            end
-        end
-        if ~valid_piece
+        % CRITICAL: Check that bin [kL, kU] intersects valid k-range at centroid
+        % The valid k-range at (pc, qc) is [|pc-qc|, pc+qc]
+        % For the piece to contribute valid k-moments, we need:
+        %   kU > |pc-qc|  (bin upper bound exceeds minimum valid k)
+        %   kL < pc+qc    (bin lower bound is below maximum valid k)
+        absd_c = abs(pc - qc);
+        s_c = pc + qc;
+        tol = 1e-10 * max(abs(kL), abs(kU));
+
+        if kU <= absd_c + tol || kL >= s_c - tol
+            % Bin doesn't intersect valid k-range at centroid - skip this piece
             continue;
         end
 
@@ -346,22 +331,6 @@ function [dv, mp, mq, mk, px_in, qy_in] = dv_moments_oneCell_exact(kL,kU,pL,pU,q
 
         if dv_loc <= 0
             continue;
-        end
-
-        % Debug: check if this piece contributes negative mk
-        if mk_loc < 0
-            fprintf('WARNING: Negative mk_loc = %.6e in piece %d\n', mk_loc, t);
-            fprintf('  Polygon vertices:\n');
-            for vi = 1:size(P,1)
-                fprintf('    (%.6e, %.6e)\n', P(vi,1), P(vi,2));
-            end
-            fprintf('  Branch info: upper_is_kU=%d, lower_is_kL=%d, d_nonneg=%d\n', upper_is_kU, lower_is_kL, d_nonneg);
-            fprintf('  Linear coeffs: au=%g bu=%g cu=%g | al=%g bl=%g cl=%g\n', au, bu, cu, al, bl, cl);
-            fprintf('  Diff coeffs: a=%g b=%g c=%g\n', a, b, c);
-            fprintf('  Sum coeffs: a_sum=%g b_sum=%g c_sum=%g\n', a_sum, b_sum, c_sum);
-            fprintf('  Moments: A=%g Mx=%g My=%g Ixx=%g Iyy=%g Ixy=%g\n', A, Mx, My, Ixx, Iyy, Ixy);
-            fprintf('  Cell bounds: kL=%g kU=%g pL=%g pU=%g qL=%g qU=%g\n', kL, kU, pL, pU, qL, qU);
-            fprintf('  Accumulated so far: dv=%g mk=%g\n', dv, mk);
         end
 
         % total exact integrals
