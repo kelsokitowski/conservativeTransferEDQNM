@@ -185,8 +185,10 @@ mu1_q = interpolate_mu1(qstar, logk, logmu1);
 % ALL arguments permuted: wavenumbers, spectral densities, mu1 values, indices
 %
 % k-leg: Sk_raw = 0.5*(kernel1(k,p,q) + kernel1(k,q,p))
-term1_k = kernel1(E0q, E0p, E0k, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
-term2_k = kernel1(E0p, E0q, E0k, kstar, qstar, pstar, mu1_k, mu1_q, mu1_p, kj, qj, pj, nu, t);
+% Cyclic (k,p,q): spectral from (p,q,k), wavenumbers (k,p,q), mu (k,p,q), indices (k,p,q)
+term1_k = kernel1(E0p, E0q, E0k, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+% Anticyclic (k,q,p): spectral from (q,p,k), wavenumbers (k,q,p), mu (k,q,p), indices (k,q,p)
+term2_k = kernel1(E0q, E0p, E0k, kstar, qstar, pstar, mu1_k, mu1_q, mu1_p, kj, qj, pj, nu, t);
 Sk_raw = 0.5 * (term1_k + term2_k);
 
 % Diagnostic: print first few triads to check magnitudes
@@ -203,13 +205,17 @@ if triad_count <= 5
 end
 
 % p-leg: Sp_raw = 0.5*(kernel1(p,q,k) + kernel1(p,k,q))
-term1_p = kernel1(E0k, E0q, E0p, pstar, qstar, kstar, mu1_p, mu1_q, mu1_k, pj, qj, kj, nu, t);
-term2_p = kernel1(E0q, E0k, E0p, pstar, kstar, qstar, mu1_p, mu1_k, mu1_q, pj, kj, qj, nu, t);
+% Cyclic (p,q,k): spectral from (q,k,p), wavenumbers (p,q,k), mu (p,q,k), indices (p,q,k)
+term1_p = kernel1(E0q, E0k, E0p, pstar, qstar, kstar, mu1_p, mu1_q, mu1_k, pj, qj, kj, nu, t);
+% Anticyclic (p,k,q): spectral from (k,q,p), wavenumbers (p,k,q), mu (p,k,q), indices (p,k,q)
+term2_p = kernel1(E0k, E0q, E0p, pstar, kstar, qstar, mu1_p, mu1_k, mu1_q, pj, kj, qj, nu, t);
 Sp_raw = 0.5 * (term1_p + term2_p);
 
 % q-leg: Sq_raw = 0.5*(kernel1(q,k,p) + kernel1(q,p,k))
-term1_q = kernel1(E0p, E0k, E0q, qstar, kstar, pstar, mu1_q, mu1_k, mu1_p, qj, kj, pj, nu, t);
-term2_q = kernel1(E0k, E0p, E0q, qstar, pstar, kstar, mu1_q, mu1_p, mu1_k, qj, pj, kj, nu, t);
+% Cyclic (q,k,p): spectral from (k,p,q), wavenumbers (q,k,p), mu (q,k,p), indices (q,k,p)
+term1_q = kernel1(E0k, E0p, E0q, qstar, kstar, pstar, mu1_q, mu1_k, mu1_p, qj, kj, pj, nu, t);
+% Anticyclic (q,p,k): spectral from (p,k,q), wavenumbers (q,p,k), mu (q,p,k), indices (q,p,k)
+term2_q = kernel1(E0p, E0k, E0q, qstar, pstar, kstar, mu1_q, mu1_p, mu1_k, qj, pj, kj, nu, t);
 Sq_raw = 0.5 * (term1_q + term2_q);
 
 % Jacobians at evaluation points

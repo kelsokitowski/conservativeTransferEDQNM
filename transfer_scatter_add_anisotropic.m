@@ -240,18 +240,18 @@ mu3_q = interp_log(q, logk, logmu3);
 % ============================================================================
 % ALL arguments fully permuted for each leg
 % k-leg: Sk_raw = 0.5*(kernel1(k,p,q) + kernel1(k,q,p))
-term1_k = kernel1(E0q, E0p, E0k, k, p, q, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
-term2_k = kernel1(E0p, E0q, E0k, k, q, p, mu1_k, mu1_q, mu1_p, kj, qj, pj, nu, t);
+term1_k = kernel1(E0p, E0q, E0k, k, p, q, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+term2_k = kernel1(E0q, E0p, E0k, k, q, p, mu1_k, mu1_q, mu1_p, kj, qj, pj, nu, t);
 Sk_raw = 0.5 * (term1_k + term2_k);
 
 % p-leg: Sp_raw = 0.5*(kernel1(p,q,k) + kernel1(p,k,q))
-term1_p = kernel1(E0k, E0q, E0p, p, q, k, mu1_p, mu1_q, mu1_k, pj, qj, kj, nu, t);
-term2_p = kernel1(E0q, E0k, E0p, p, k, q, mu1_p, mu1_k, mu1_q, pj, kj, qj, nu, t);
+term1_p = kernel1(E0q, E0k, E0p, p, q, k, mu1_p, mu1_q, mu1_k, pj, qj, kj, nu, t);
+term2_p = kernel1(E0k, E0q, E0p, p, k, q, mu1_p, mu1_k, mu1_q, pj, kj, qj, nu, t);
 Sp_raw = 0.5 * (term1_p + term2_p);
 
 % q-leg: Sq_raw = 0.5*(kernel1(q,k,p) + kernel1(q,p,k))
-term1_q = kernel1(E0p, E0k, E0q, q, k, p, mu1_q, mu1_k, mu1_p, qj, kj, pj, nu, t);
-term2_q = kernel1(E0k, E0p, E0q, q, p, k, mu1_q, mu1_p, mu1_k, qj, pj, kj, nu, t);
+term1_q = kernel1(E0k, E0p, E0q, q, k, p, mu1_q, mu1_k, mu1_p, qj, kj, pj, nu, t);
+term2_q = kernel1(E0p, E0k, E0q, q, p, k, mu1_q, mu1_p, mu1_k, qj, pj, kj, nu, t);
 Sq_raw = 0.5 * (term1_q + term2_q);
 
 delta = (Sk_raw + Sp_raw + Sq_raw) / 3.0;
@@ -267,18 +267,18 @@ dEq_iso = dEq_iso - s/3.0;
 % 2. S_NL_DIR: kernel2
 % ============================================================================
 % k-leg: Sk_raw = 0.5*(kernel2(k,p,q) + kernel2(k,q,p))
-term1_k = kernel2(E0q, E0p, E0k, HPOLq, HPOLp, HDIRq, HDIRp, HDIRk, k, p, q, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
-term2_k = kernel2(E0p, E0q, E0k, HPOLp, HPOLq, HDIRp, HDIRq, HDIRk, k, q, p, mu1_k, mu1_q, mu1_p, kj, qj, pj, nu, t);
+term1_k = kernel2(E0p, E0q, E0k, HPOLp, HPOLq, HDIRp, HDIRq, HDIRk, k, p, q, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+term2_k = kernel2(E0q, E0p, E0k, HPOLq, HPOLp, HDIRq, HDIRp, HDIRk, k, q, p, mu1_k, mu1_q, mu1_p, kj, qj, pj, nu, t);
 Sk_raw = 0.5 * (term1_k + term2_k);
 
 % p-leg: Sp_raw = 0.5*(kernel2(p,q,k) + kernel2(p,k,q))
-term1_p = kernel2(E0k, E0q, E0p, HPOLk, HPOLq, HDIRk, HDIRq, HDIRp, p, q, k, mu1_p, mu1_q, mu1_k, pj, qj, kj, nu, t);
-term2_p = kernel2(E0q, E0k, E0p, HPOLq, HPOLk, HDIRq, HDIRk, HDIRp, p, k, q, mu1_p, mu1_k, mu1_q, pj, kj, qj, nu, t);
+term1_p = kernel2(E0q, E0k, E0p, HPOLq, HPOLk, HDIRq, HDIRk, HDIRp, p, q, k, mu1_p, mu1_q, mu1_k, pj, qj, kj, nu, t);
+term2_p = kernel2(E0k, E0q, E0p, HPOLk, HPOLq, HDIRk, HDIRq, HDIRp, p, k, q, mu1_p, mu1_k, mu1_q, pj, kj, qj, nu, t);
 Sp_raw = 0.5 * (term1_p + term2_p);
 
 % q-leg: Sq_raw = 0.5*(kernel2(q,k,p) + kernel2(q,p,k))
-term1_q = kernel2(E0p, E0k, E0q, HPOLp, HPOLk, HDIRp, HDIRk, HDIRq, q, k, p, mu1_q, mu1_k, mu1_p, qj, kj, pj, nu, t);
-term2_q = kernel2(E0k, E0p, E0q, HPOLk, HPOLp, HDIRk, HDIRp, HDIRq, q, p, k, mu1_q, mu1_p, mu1_k, qj, pj, kj, nu, t);
+term1_q = kernel2(E0k, E0p, E0q, HPOLk, HPOLp, HDIRk, HDIRp, HDIRq, q, k, p, mu1_q, mu1_k, mu1_p, qj, kj, pj, nu, t);
+term2_q = kernel2(E0p, E0k, E0q, HPOLp, HPOLk, HDIRp, HDIRk, HDIRq, q, p, k, mu1_q, mu1_p, mu1_k, qj, pj, kj, nu, t);
 Sq_raw = 0.5 * (term1_q + term2_q);
 
 delta = (Sk_raw + Sp_raw + Sq_raw) / 3.0;
@@ -294,18 +294,18 @@ dEq_dir = dEq_dir - s/3.0;
 % 3. S_NL_POL: kernel3
 % ============================================================================
 % k-leg: Sk_raw = 0.5*(kernel3(k,p,q) + kernel3(k,q,p))
-term1_k = kernel3(E0q, E0p, E0k, HPOLq, HPOLp, HPOLk, HDIRq, HDIRp, k, p, q, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
-term2_k = kernel3(E0p, E0q, E0k, HPOLp, HPOLq, HPOLk, HDIRp, HDIRq, k, q, p, mu1_k, mu1_q, mu1_p, kj, qj, pj, nu, t);
+term1_k = kernel3(E0p, E0q, E0k, HPOLp, HPOLq, HPOLk, HDIRp, HDIRq, k, p, q, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+term2_k = kernel3(E0q, E0p, E0k, HPOLq, HPOLp, HPOLk, HDIRq, HDIRp, k, q, p, mu1_k, mu1_q, mu1_p, kj, qj, pj, nu, t);
 Sk_raw = 0.5 * (term1_k + term2_k);
 
 % p-leg: Sp_raw = 0.5*(kernel3(p,q,k) + kernel3(p,k,q))
-term1_p = kernel3(E0k, E0q, E0p, HPOLk, HPOLq, HPOLp, HDIRk, HDIRq, p, q, k, mu1_p, mu1_q, mu1_k, pj, qj, kj, nu, t);
-term2_p = kernel3(E0q, E0k, E0p, HPOLq, HPOLk, HPOLp, HDIRq, HDIRk, p, k, q, mu1_p, mu1_k, mu1_q, pj, kj, qj, nu, t);
+term1_p = kernel3(E0q, E0k, E0p, HPOLq, HPOLk, HPOLp, HDIRq, HDIRk, p, q, k, mu1_p, mu1_q, mu1_k, pj, qj, kj, nu, t);
+term2_p = kernel3(E0k, E0q, E0p, HPOLk, HPOLq, HPOLp, HDIRk, HDIRq, p, k, q, mu1_p, mu1_k, mu1_q, pj, kj, qj, nu, t);
 Sp_raw = 0.5 * (term1_p + term2_p);
 
 % q-leg: Sq_raw = 0.5*(kernel3(q,k,p) + kernel3(q,p,k))
-term1_q = kernel3(E0p, E0k, E0q, HPOLp, HPOLk, HPOLq, HDIRp, HDIRk, q, k, p, mu1_q, mu1_k, mu1_p, qj, kj, pj, nu, t);
-term2_q = kernel3(E0k, E0p, E0q, HPOLk, HPOLp, HPOLq, HDIRk, HDIRp, q, p, k, mu1_q, mu1_p, mu1_k, qj, pj, kj, nu, t);
+term1_q = kernel3(E0k, E0p, E0q, HPOLk, HPOLp, HPOLq, HDIRk, HDIRp, q, k, p, mu1_q, mu1_k, mu1_p, qj, kj, pj, nu, t);
+term2_q = kernel3(E0p, E0k, E0q, HPOLp, HPOLk, HPOLq, HDIRp, HDIRk, q, p, k, mu1_q, mu1_p, mu1_k, qj, pj, kj, nu, t);
 Sq_raw = 0.5 * (term1_q + term2_q);
 
 delta = (Sk_raw + Sp_raw + Sq_raw) / 3.0;
@@ -321,18 +321,18 @@ dEq_pol = dEq_pol - s/3.0;
 % 4. ST_NL_ISO: kernel4
 % ============================================================================
 % k-leg: STk_raw = 0.5*(kernel4(k,p,q) + kernel4(k,q,p))
-term1_k = kernel4(Eq, E0Tk, E0Tp, k, p, q, mu3_q, nu, D, t-t0);
-term2_k = kernel4(Eq, E0Tk, E0Tp, k, q, p, mu3_q, nu, D, t-t0);
+term1_k = kernel4(Ep, E0Tq, E0Tk, k, p, q, mu3_k, nu, D, t-t0);
+term2_k = kernel4(Eq, E0Tp, E0Tk, k, q, p, mu3_k, nu, D, t-t0);
 STk_raw = 0.5 * (term1_k + term2_k);
 
 % p-leg: STp_raw = 0.5*(kernel4(p,q,k) + kernel4(p,k,q))
-term1_p = kernel4(Ek, E0Tp, E0Tq, p, q, k, mu3_k, nu, D, t-t0);
-term2_p = kernel4(Ek, E0Tp, E0Tq, p, k, q, mu3_k, nu, D, t-t0);
+term1_p = kernel4(Eq, E0Tk, E0Tp, p, q, k, mu3_p, nu, D, t-t0);
+term2_p = kernel4(Ek, E0Tq, E0Tp, p, k, q, mu3_p, nu, D, t-t0);
 STp_raw = 0.5 * (term1_p + term2_p);
 
 % q-leg: STq_raw = 0.5*(kernel4(q,k,p) + kernel4(q,p,k))
-term1_q = kernel4(Ep, E0Tq, E0Tk, q, k, p, mu3_p, nu, D, t-t0);
-term2_q = kernel4(Ep, E0Tq, E0Tk, q, p, k, mu3_p, nu, D, t-t0);
+term1_q = kernel4(Ek, E0Tp, E0Tq, q, k, p, mu3_q, nu, D, t-t0);
+term2_q = kernel4(Ep, E0Tk, E0Tq, q, p, k, mu3_q, nu, D, t-t0);
 STq_raw = 0.5 * (term1_q + term2_q);
 
 delta = (STk_raw + STp_raw + STq_raw) / 3.0;
@@ -348,18 +348,18 @@ dETq_iso = dETq_iso - s/3.0;
 % 5. ST_NL_DIR: kernel5
 % ============================================================================
 % k-leg: STk_raw = 0.5*(kernel5(k,p,q) + kernel5(k,q,p))
-term1_k = kernel5(E0q, E0p, E0Tk, E0Tp, E0Tq, HPOLq, HPOLp, HDIRq, HDIRp, HTk, HTp, HTq, k, p, q, mu3_q, nu, D, t-t0);
-term2_k = kernel5(E0p, E0q, E0Tk, E0Tq, E0Tp, HPOLp, HPOLq, HDIRp, HDIRq, HTk, HTq, HTp, k, q, p, mu3_q, nu, D, t-t0);
+term1_k = kernel5(E0p, E0q, E0Tk, E0Tp, E0Tq, HPOLp, HPOLq, HDIRp, HDIRq, HTk, HTp, HTq, k, p, q, mu3_k, nu, D, t-t0);
+term2_k = kernel5(E0q, E0p, E0Tk, E0Tq, E0Tp, HPOLq, HPOLp, HDIRq, HDIRp, HTk, HTq, HTp, k, q, p, mu3_k, nu, D, t-t0);
 STk_raw = 0.5 * (term1_k + term2_k);
 
 % p-leg: STp_raw = 0.5*(kernel5(p,q,k) + kernel5(p,k,q))
-term1_p = kernel5(E0k, E0q, E0Tp, E0Tq, E0Tk, HPOLk, HPOLq, HDIRk, HDIRq, HTp, HTq, HTk, p, q, k, mu3_k, nu, D, t-t0);
-term2_p = kernel5(E0q, E0k, E0Tp, E0Tk, E0Tq, HPOLq, HPOLk, HDIRq, HDIRk, HTp, HTk, HTq, p, k, q, mu3_k, nu, D, t-t0);
+term1_p = kernel5(E0q, E0k, E0Tp, E0Tq, E0Tk, HPOLq, HPOLk, HDIRq, HDIRk, HTp, HTq, HTk, p, q, k, mu3_p, nu, D, t-t0);
+term2_p = kernel5(E0k, E0q, E0Tp, E0Tk, E0Tq, HPOLk, HPOLq, HDIRk, HDIRq, HTp, HTk, HTq, p, k, q, mu3_p, nu, D, t-t0);
 STp_raw = 0.5 * (term1_p + term2_p);
 
 % q-leg: STq_raw = 0.5*(kernel5(q,k,p) + kernel5(q,p,k))
-term1_q = kernel5(E0p, E0k, E0Tq, E0Tk, E0Tp, HPOLp, HPOLk, HDIRp, HDIRk, HTq, HTk, HTp, q, k, p, mu3_p, nu, D, t-t0);
-term2_q = kernel5(E0k, E0p, E0Tq, E0Tp, E0Tk, HPOLk, HPOLp, HDIRk, HDIRp, HTq, HTp, HTk, q, p, k, mu3_p, nu, D, t-t0);
+term1_q = kernel5(E0k, E0p, E0Tq, E0Tk, E0Tp, HPOLk, HPOLp, HDIRk, HDIRp, HTq, HTk, HTp, q, k, p, mu3_q, nu, D, t-t0);
+term2_q = kernel5(E0p, E0k, E0Tq, E0Tp, E0Tk, HPOLp, HPOLk, HDIRp, HDIRk, HTq, HTp, HTk, q, p, k, mu3_q, nu, D, t-t0);
 STq_raw = 0.5 * (term1_q + term2_q);
 
 delta = (STk_raw + STp_raw + STq_raw) / 3.0;
@@ -376,18 +376,18 @@ dETq_dir = dETq_dir - s/3.0;
 % ============================================================================
 % ALL arguments fully permuted for each leg
 % k-leg: SFk_raw = 0.5*(kernel6(k,p,q) + kernel6(k,q,p))
-term1_k = kernel6(E0q, E0p, E0k, EFq, EFp, EFk, k, p, q, mu3_k, mu3_p, mu3_q, nu, D, t-t0);
-term2_k = kernel6(E0p, E0q, E0k, EFp, EFq, EFk, k, q, p, mu3_k, mu3_q, mu3_p, nu, D, t-t0);
+term1_k = kernel6(E0p, E0q, E0k, EFp, EFq, EFk, k, p, q, mu3_k, mu3_p, mu3_q, nu, D, t-t0);
+term2_k = kernel6(E0q, E0p, E0k, EFq, EFp, EFk, k, q, p, mu3_k, mu3_q, mu3_p, nu, D, t-t0);
 SFk_raw = 0.5 * (term1_k + term2_k);
 
 % p-leg: SFp_raw = 0.5*(kernel6(p,q,k) + kernel6(p,k,q))
-term1_p = kernel6(E0k, E0q, E0p, EFk, EFq, EFp, p, q, k, mu3_p, mu3_q, mu3_k, nu, D, t-t0);
-term2_p = kernel6(E0q, E0k, E0p, EFq, EFk, EFp, p, k, q, mu3_p, mu3_k, mu3_q, nu, D, t-t0);
+term1_p = kernel6(E0q, E0k, E0p, EFq, EFk, EFp, p, q, k, mu3_p, mu3_q, mu3_k, nu, D, t-t0);
+term2_p = kernel6(E0k, E0q, E0p, EFk, EFq, EFp, p, k, q, mu3_p, mu3_k, mu3_q, nu, D, t-t0);
 SFp_raw = 0.5 * (term1_p + term2_p);
 
 % q-leg: SFq_raw = 0.5*(kernel6(q,k,p) + kernel6(q,p,k))
-term1_q = kernel6(E0p, E0k, E0q, EFp, EFk, EFq, q, k, p, mu3_q, mu3_k, mu3_p, nu, D, t-t0);
-term2_q = kernel6(E0k, E0p, E0q, EFk, EFp, EFq, q, p, k, mu3_q, mu3_p, mu3_k, nu, D, t-t0);
+term1_q = kernel6(E0k, E0p, E0q, EFk, EFp, EFq, q, k, p, mu3_q, mu3_k, mu3_p, nu, D, t-t0);
+term2_q = kernel6(E0p, E0k, E0q, EFp, EFk, EFq, q, p, k, mu3_q, mu3_p, mu3_k, nu, D, t-t0);
 SFq_raw = 0.5 * (term1_q + term2_q);
 
 delta = (SFk_raw + SFp_raw + SFq_raw) / 3.0;
