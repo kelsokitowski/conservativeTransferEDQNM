@@ -77,9 +77,9 @@ function [weight_k, centroidX_k, centroidY_k, centroidZ_k, weight_p, centroidX_p
                 end
 
                 % ----------------------------------------------------------
-                % 2b) Exact dv and a guaranteed-inside evaluation point
+                % 2b) Exact dv and moments (true centroids)
                 % ----------------------------------------------------------
-                [vol, ~, ~, px_in, qy_in] = dv_moments_oneCell_exact(kL,kU,pL,pU,qL,qU);
+                [vol, mp, mq, mk, ~, ~] = dv_moments_oneCell_exact(kL,kU,pL,pU,qL,qU);
 
                 if vol > 0
                     % Fill dv for all 6 permutations (cyclic + p↔q symmetry)
@@ -92,27 +92,23 @@ function [weight_k, centroidX_k, centroidY_k, centroidZ_k, weight_p, centroidX_p
                         dv(kj,qj,pj) = vol;  % p↔q mirror of 3rd cyclic
                     end
 
-                    % Compute k-centroid at the (p,q) centroid
-                    % k-range at (px_in, qy_in): max(kL, |px_in - qy_in|) to min(kU, px_in + qy_in)
-                    k_lower = max(kL, abs(px_in - qy_in));
-                    k_upper = min(kU, px_in + qy_in);
-                    kz_in = 0.5 * (k_lower + k_upper);  % Midpoint approximation
+                    % TRUE geometric centroids from moments
+                    % These account for the actual triad geometry, including
+                    % cut cells where only part of the bin is inside the domain
+                    pc_true = mp / vol;  % p-centroid
+                    qc_true = mq / vol;  % q-centroid
+                    kc_true = mk / vol;  % k-centroid
 
-                    % Store centroids for k-slice at (pj,qj,kj) only
-                    % These are the actual geometric centroids computed from polygon moments
-                    centroidX_k(pj,qj,kj) = px_in;  % p coordinate
-                    centroidY_k(pj,qj,kj) = qy_in;  % q coordinate
-                    centroidZ_k(pj,qj,kj) = kz_in;  % k coordinate
+                    % Store centroids for k-slice at (pj,qj,kj)
+                    centroidX_k(pj,qj,kj) = pc_true;  % p coordinate
+                    centroidY_k(pj,qj,kj) = qc_true;  % q coordinate
+                    centroidZ_k(pj,qj,kj) = kc_true;  % k coordinate
 
                     % Mirror p<->q symmetry for k-slice centroids
                     if qj ~= pj
-                        k_lower_mirror = max(kL, abs(qy_in - px_in));
-                        k_upper_mirror = min(kU, qy_in + px_in);
-                        kz_in_mirror = 0.5 * (k_lower_mirror + k_upper_mirror);
-
-                        centroidX_k(qj,pj,kj) = qy_in;
-                        centroidY_k(qj,pj,kj) = px_in;
-                        centroidZ_k(qj,pj,kj) = kz_in_mirror;
+                        centroidX_k(qj,pj,kj) = qc_true;
+                        centroidY_k(qj,pj,kj) = pc_true;
+                        centroidZ_k(qj,pj,kj) = kc_true;  % k-centroid same under p<->q swap
                     end
                 end
             end
@@ -198,9 +194,9 @@ end
 % =========================================================================
 % EXACT dv AND MOMENTS FOR ONE CELL (CORE GEOMETRY)
 % =========================================================================
-function [dv, mp, mq, px_in, qy_in] = dv_moments_oneCell_exact(kL,kU,pL,pU,qL,qU)
+function [dv, mp, mq, mk, px_in, qy_in] = dv_moments_oneCell_exact(kL,kU,pL,pU,qL,qU)
 
-    dv = 0.0; mp = 0.0; mq = 0.0;
+    dv = 0.0; mp = 0.0; mq = 0.0; mk = 0.0;
     px_in = 0.0; qy_in = 0.0;
 
     if kU <= kL
@@ -311,6 +307,17 @@ function [dv, mp, mq, px_in, qy_in] = dv_moments_oneCell_exact(kL,kU,pL,pU,qL,qU
         mp_loc = a*Ixx + b*Ixy + c*Mx;
         mq_loc = a*Ixy + b*Iyy + c*My;
 
+        % k-moment: mk = 0.5 * ∫∫ (upper² - lower²) dp dq
+        % where upper = au*p + bu*q + cu, lower = al*p + bl*q + cl
+        % Using (a²-b²) = (a-b)(a+b) factorization:
+        % upper² - lower² = (a*p + b*q + c) * ((au+al)*p + (bu+bl)*q + (cu+cl))
+        a_sum = au + al;
+        b_sum = bu + bl;
+        c_sum = cu + cl;
+        mk_loc = 0.5 * (a*a_sum*Ixx + (a*b_sum + b*a_sum)*Ixy + b*b_sum*Iyy ...
+                       + (a*c_sum + c*a_sum)*Mx + (b*c_sum + c*b_sum)*My ...
+                       + c*c_sum*A);
+
         if dv_loc <= 0
             continue;
         end
@@ -319,6 +326,7 @@ function [dv, mp, mq, px_in, qy_in] = dv_moments_oneCell_exact(kL,kU,pL,pU,qL,qU
         dv = dv + dv_loc;
         mp = mp + mp_loc;
         mq = mq + mq_loc;
+        mk = mk + mk_loc;
 
         % ---- CRITICAL CHANGE ----
         % Choose geometric centroid as the inside evaluation point.
