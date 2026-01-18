@@ -405,26 +405,26 @@ end
 % ============================================================================
 
 % kernel1: S_NL_ISO (Isotropic energy transfer)
-function val = kernel1(E0_a, E0_b, E0_c, k, p, q, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t)
+function val = kernel1(E0_p, E0_q, E0_k, k, p, q, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t)
 x = (k^2 + p^2 - q^2) / (2*k*p);
 y = (k^2 + q^2 - p^2) / (2*k*q);
 z = (p^2 + q^2 - k^2) / (2*p*q);
 thetaVal = theta(nu, k, p, q, kj, pj, qj, t, mu1_k, mu1_p, mu1_q);
-val = thetaVal * 16.0 * pi^2 * p^2 * k^2 * q * (x*y + z^3) * E0_a * (E0_b - E0_c);
+val = thetaVal * 16.0 * pi^2 * p^2 * k^2 * q * (x*y + z^3) * E0_q * (E0_p - E0_k);
 end
 
 % kernel2: S_NL_DIR (Directional anisotropy)
-function val = kernel2(E0_a, E0_b, E0_c, HPOL_a, HPOL_b, HDIR_a, HDIR_b, HDIR_c, k, p, q, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t)
+function val = kernel2(E0_p, E0_q, E0_k, HPOL_p, HPOL_q, HDIR_p, HDIR_q, HDIR_k, k, p, q, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t)
 x = (k^2 + p^2 - q^2) / (2*k*p);
 y = (k^2 + q^2 - p^2) / (2*k*q);
 z = (p^2 + q^2 - k^2) / (2*p*q);
 thetaVal = theta(nu, k, p, q, kj, pj, qj, t, mu1_k, mu1_p, mu1_q);
 
-kernel21 = E0_a * (E0_b - E0_c) * HPOL_a;
-kernel22 = E0_a * E0_b * HPOL_b;
-kernel23 = E0_a * (E0_b - E0_c) * HDIR_a;
-kernel24 = E0_a * E0_b * HDIR_b;
-kernel25 = E0_a * E0_c * HDIR_c;
+kernel21 = E0_q * (E0_p - E0_k) * HPOL_q;
+kernel22 = E0_q * E0_p * HPOL_p;
+kernel23 = E0_q * (E0_p - E0_k) * HDIR_q;
+kernel24 = E0_q * E0_p * HDIR_p;
+kernel25 = E0_q * E0_k * HDIR_k;
 
 val = thetaVal * 4.0 * pi^2 * p^2 * k^2 * q * (...
     (y^2 - 1.0) * (x*y + z^3) * kernel21 + z * (1.0 - z^2)^2 * kernel22) + ...
@@ -433,19 +433,19 @@ val = thetaVal * 4.0 * pi^2 * p^2 * k^2 * q * (...
 end
 
 % kernel3: S_NL_POL (Poloidal anisotropy)
-function val = kernel3(E0_a, E0_b, E0_c, HPOL_a, HPOL_b, HPOL_c, HDIR_a, HDIR_b, k, p, q, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t)
+function val = kernel3(E0_p, E0_q, E0_k, HPOL_p, HPOL_q, HPOL_k, HDIR_p, HDIR_q, k, p, q, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t)
 x = (k^2 + p^2 - q^2) / (2*k*p);
 y = (k^2 + q^2 - p^2) / (2*k*q);
 z = (p^2 + q^2 - k^2) / (2*p*q);
 thetaVal = theta(nu, k, p, q, kj, pj, qj, t, mu1_k, mu1_p, mu1_q);
 
-kernel31 = E0_a * E0_b * HPOL_b;
-kernel32 = E0_a * E0_c * HPOL_c;
-kernel33 = E0_a * (E0_b - E0_c) * HPOL_a;
+kernel31 = E0_q * E0_p * HPOL_p;
+kernel32 = E0_q * E0_k * HPOL_k;
+kernel33 = E0_q * (E0_p - E0_k) * HPOL_q;
 kernel34 = kernel31;
-kernel35 = E0_a * E0_c * HPOL_a;
-kernel36 = E0_a * (E0_b - E0_c) * HDIR_a;
-kernel37 = E0_a * E0_b * HDIR_b;
+kernel35 = E0_q * E0_k * HPOL_q;
+kernel36 = E0_q * (E0_p - E0_k) * HDIR_q;
+kernel37 = E0_q * E0_p * HDIR_p;
 
 val = thetaVal * 4.0 * pi^2 * p^2 * k^2 * q * (...
     (x*y + z^3) * ((1.0 + z^2) * kernel31 - 4.0 * kernel32) + ...
@@ -457,24 +457,24 @@ val = thetaVal * 4.0 * pi^2 * p^2 * k^2 * q * (...
 end
 
 % kernel4: ST_NL_ISO (Scalar isotropic)
-function val = kernel4(E_a, E0T_b, E0T_c, k, p, q, mu3_a, nu, D, t_rel)
+function val = kernel4(E_p, E0T_q, E0T_k, k, p, q, mu3_k, nu, D, t_rel)
 y = (k^2 + q^2 - p^2) / (2*k*q);
-thetaTVal = thetaT(nu, D, k, p, q, t_rel, mu3_a);
-kernel4_inner = E_a * (k^2 * E0T_b - p^2 * E0T_c);
+thetaTVal = thetaT(nu, D, k, p, q, t_rel, mu3_k);
+kernel4_inner = E_p * (k^2 * E0T_q - p^2 * E0T_k);
 val = thetaTVal * k / (p*q) * (1.0 - y^2) * kernel4_inner;
 end
 
 % kernel5: ST_NL_DIR (Scalar directional)
-function val = kernel5(E0_a, E0_b, E0T_c, E0T_b, E0T_d, HPOL_a, HPOL_b, HDIR_a, HDIR_b, HT_c, HT_b, HT_d, k, p, q, mu3_a, nu, D, t_rel)
+function val = kernel5(E0_p, E0_q, E0T_k, E0T_p, E0T_q, HPOL_p, HPOL_q, HDIR_p, HDIR_q, HT_k, HT_p, HT_q, k, p, q, mu3_k, nu, D, t_rel)
 x = (k^2 + p^2 - q^2) / (2*k*p);
 y = (k^2 + q^2 - p^2) / (2*k*q);
 z = (p^2 + q^2 - k^2) / (2*p*q);
-thetaTVal = thetaT(nu, D, k, p, q, t_rel, mu3_a);
+thetaTVal = thetaT(nu, D, k, p, q, t_rel, mu3_k);
 
-kernel51 = E0_a * (E0T_b - E0T_c) * HPOL_a;
-kernel52 = E0_a * (E0T_b - E0T_c) * HDIR_a;
-kernel53 = E0_a * E0T_b * HT_b;
-kernel54 = E0_a * 2.0 * E0T_c * HT_c;
+kernel51 = E0_q * (E0T_p - E0T_k) * HPOL_q;
+kernel52 = E0_q * (E0T_p - E0T_k) * HDIR_q;
+kernel53 = E0_q * E0T_p * HT_p;
+kernel54 = E0_q * 2.0 * E0T_k * HT_k;
 
 val = 4.0 * thetaTVal * pi^2 * k^2 * p^2 * q * (x*y + z) * (y^2 - 1.0) * kernel51 + ...
     8.0 * thetaTVal * pi^2 * k^2 * p^2 * q * (x*y + z) * (3.0*y^2 - 1.0) * kernel52 + ...
@@ -482,20 +482,20 @@ val = 4.0 * thetaTVal * pi^2 * k^2 * p^2 * q * (x*y + z) * (y^2 - 1.0) * kernel5
 end
 
 % kernel6: SF_NL (Flux transfer)
-function val = kernel6(E0_a, E0_b, E0_c, EF_b, EF_a, EF_c, k, p, q, mu3_1, mu3_2, mu3_3, nu, D, t_rel)
+function val = kernel6(E0_p, E0_k, E0_q, EF_k, EF_p, EF_q, k, p, q, mu3_p, mu3_q, mu3_k, nu, D, t_rel)
 x = (k^2 + p^2 - q^2) / (2*k*p);
 y = (k^2 + q^2 - p^2) / (2*k*q);
 z = (p^2 + q^2 - k^2) / (2*p*q);
 
-thetaF_1 = thetaF(nu, D, k, p, q, t_rel, mu3_1, mu3_2);
-thetaF_2 = thetaF(nu, D, p, k, q, t_rel, mu3_3, mu3_2);
+thetaF_1 = thetaF(nu, D, k, p, q, t_rel, mu3_p, mu3_q);
+thetaF_2 = thetaF(nu, D, p, k, q, t_rel, mu3_k, mu3_q);
 
-kernel61 = E0_a * EF_c;
-kernel62 = E0_a * EF_b;
-kernel63 = E0_b * EF_a;
-kernel64 = E0_b * EF_c;
-kernel65 = E0_c * EF_a;
-kernel66 = E0_c * EF_b;
+kernel61 = E0_p * EF_q;
+kernel62 = E0_p * EF_k;
+kernel63 = E0_k * EF_p;
+kernel64 = E0_k * EF_q;
+kernel65 = E0_q * EF_p;
+kernel66 = E0_q * EF_k;
 
 val = 4.0 * pi^2 * thetaF_1 * k^2 * p * q * (...
     k * kernel61 * (1.0 + y^2 - z^2 - x*y*z - 2.0*y^2*z^2) - ...

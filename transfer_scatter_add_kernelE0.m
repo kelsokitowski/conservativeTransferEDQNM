@@ -266,14 +266,14 @@ end
 % ============================================================================
 % HELPER FUNCTION: EDQNM kernel (Fortran-compatible)
 % ============================================================================
-% Computes one term of EDQNM kernel: theta * 16*pi^2 * p^2*k^2*q * (xy+z^3) * E0_a*(E0_b-E0_c)
+% Computes one term of EDQNM kernel: theta * 16*pi^2 * p^2*k^2*q * (xy+z^3) * E0_q*(E0_p-E0_k)
 % where:
-%   E0_a, E0_b, E0_c: spectral energy density values (ordered for this term)
-%   k, p, q: triad wavenumbers (always kstar, pstar, qstar - for geometry)
-%   mu1_k, mu1_p, mu1_q: eddy damping at k, p, q (always in k,p,q order)
-%   kj, pj, qj: bin indices (always in k,p,q order)
+%   E0_p, E0_q, E0_k: spectral energy density at p, q, k (cyclic ordering convention)
+%   k, p, q: triad wavenumbers (for geometry computation)
+%   mu1_k, mu1_p, mu1_q: eddy damping at k, p, q
+%   kj, pj, qj: bin indices
 %   nu, t: viscosity and integration time
-function kernel1Val = kernel1(E0_a, E0_b, E0_c, k, p, q, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t)
+function kernel1Val = kernel1(E0_p, E0_q, E0_k, k, p, q, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t)
 
 % Triad geometry: cosines of angles (computed from k, p, q wavenumbers)
 % x = cos(angle between k and p) = (k^2 + p^2 - q^2)/(2*k*p)
@@ -288,9 +288,8 @@ thetaVal = theta(nu, k, p, q, kj, pj, qj, t, mu1_k, mu1_p, mu1_q);
 
 % Full EDQNM kernel term
 % Geometry: 16*pi^2 * p^2*k^2*q * (xy+z^3)
-% Spectral: E0_a*(E0_b-E0_c)
-kernel1Val = thetaVal * 16.0 * pi^2 * p^2 * k^2 * q * (x*y + z^3) * E0_a * (E0_b - E0_c);
-%kernel1Val = E0_a*(E0_b-E0_c);
+% Spectral: E0_q*(E0_p-E0_k)
+kernel1Val = thetaVal * 16.0 * pi^2 * p^2 * k^2 * q * (x*y + z^3) * E0_q * (E0_p - E0_k);
 
 end
 
