@@ -182,19 +182,34 @@ mu1_p = interpolate_mu1(pstar, logk, logmu1);
 mu1_q = interpolate_mu1(qstar, logk, logmu1);
 
 % Compute EDQNM kernel for each leg (two terms per leg)
-% k-leg: Sk_raw = 0.5*(term1 + term2)
+% ALL arguments permuted: wavenumbers, spectral densities, mu1 values, indices
+%
+% k-leg: Sk_raw = 0.5*(kernel1(k,p,q) + kernel1(k,q,p))
 term1_k = kernel1(E0q, E0p, E0k, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
-term2_k = kernel1(E0p, E0q, E0k, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+term2_k = kernel1(E0p, E0q, E0k, kstar, qstar, pstar, mu1_k, mu1_q, mu1_p, kj, qj, pj, nu, t);
 Sk_raw = 0.5 * (term1_k + term2_k);
 
-% p-leg: Sp_raw = 0.5*(term1 + term2)
-term1_p = kernel1(E0k, E0q, E0p, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
-term2_p = kernel1(E0q, E0k, E0p, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+% Diagnostic: print first few triads to check magnitudes
+persistent triad_count;
+if isempty(triad_count), triad_count = 0; end
+triad_count = triad_count + 1;
+if triad_count <= 5
+    thetaVal_test = theta(nu, kstar, pstar, qstar, kj, pj, qj, t, mu1_k, mu1_p, mu1_q);
+    damping_rate = nu*(kstar^2 + pstar^2 + qstar^2) + mu1_k + mu1_p + mu1_q;
+    fprintf('Triad %d: kj=%d pj=%d qj=%d | k=%.3e p=%.3e q=%.3e\n', triad_count, kj, pj, qj, kstar, pstar, qstar);
+    fprintf('  E0: k=%.3e p=%.3e q=%.3e | mu1: k=%.3e p=%.3e q=%.3e\n', E0k, E0p, E0q, mu1_k, mu1_p, mu1_q);
+    fprintf('  theta=%.3e damping=%.3e t=%.3e nu=%.3e\n', thetaVal_test, damping_rate, t, nu);
+    fprintf('  term1_k=%.3e term2_k=%.3e Sk_raw=%.3e | dv=%.3e\n', term1_k, term2_k, Sk_raw, dv);
+end
+
+% p-leg: Sp_raw = 0.5*(kernel1(p,q,k) + kernel1(p,k,q))
+term1_p = kernel1(E0k, E0q, E0p, pstar, qstar, kstar, mu1_p, mu1_q, mu1_k, pj, qj, kj, nu, t);
+term2_p = kernel1(E0q, E0k, E0p, pstar, kstar, qstar, mu1_p, mu1_k, mu1_q, pj, kj, qj, nu, t);
 Sp_raw = 0.5 * (term1_p + term2_p);
 
-% q-leg: Sq_raw = 0.5*(term1 + term2)
-term1_q = kernel1(E0k, E0p, E0q, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
-term2_q = kernel1(E0p, E0k, E0q, kstar, pstar, qstar, mu1_k, mu1_p, mu1_q, kj, pj, qj, nu, t);
+% q-leg: Sq_raw = 0.5*(kernel1(q,k,p) + kernel1(q,p,k))
+term1_q = kernel1(E0p, E0k, E0q, qstar, kstar, pstar, mu1_q, mu1_k, mu1_p, qj, kj, pj, nu, t);
+term2_q = kernel1(E0k, E0p, E0q, qstar, pstar, kstar, mu1_q, mu1_p, mu1_k, qj, pj, kj, nu, t);
 Sq_raw = 0.5 * (term1_q + term2_q);
 
 % Jacobians at evaluation points
