@@ -63,13 +63,32 @@ nonzero_exact = (weight_exact > 0);
 nonzero_area = (weight_area > 0);
 common_nonzero = nonzero_exact & nonzero_area;
 
+% Analyze differences
+exact_only = nonzero_exact & ~nonzero_area;  % Cells only in exact
+area_only = ~nonzero_exact & nonzero_area;   % Cells only in area
+
 fprintf('Weight statistics:\n');
 fprintf('  Exact method: %d non-zero weights\n', nnz(nonzero_exact));
 fprintf('  Area method:  %d non-zero weights\n', nnz(nonzero_area));
 fprintf('  Common:       %d non-zero weights\n', nnz(common_nonzero));
-fprintf('  Max absolute difference: %.6e\n', max(weight_diff(:)));
+fprintf('  Exact-only:   %d cells (%.1f%% of exact)\n', nnz(exact_only), 100*nnz(exact_only)/nnz(nonzero_exact));
+fprintf('  Area-only:    %d cells (%.1f%% of area)\n', nnz(area_only), 100*nnz(area_only)/nnz(nonzero_area));
+fprintf('\n');
+fprintf('Magnitude comparison (common cells):\n');
+fprintf('  Max absolute difference: %.6e\n', max(weight_diff(common_nonzero)));
 fprintf('  Max relative difference: %.6e\n', max(rel_diff(common_nonzero)));
 fprintf('  Mean relative difference: %.6e\n', mean(rel_diff(common_nonzero)));
+
+% Check if exact-only weights are small slivers
+if nnz(exact_only) > 0
+    exact_only_weights = weight_exact(exact_only);
+    fprintf('\n');
+    fprintf('Exact-only weight statistics (potential slivers):\n');
+    fprintf('  Min:  %.6e\n', min(exact_only_weights));
+    fprintf('  Max:  %.6e\n', max(exact_only_weights));
+    fprintf('  Mean: %.6e\n', mean(exact_only_weights));
+    fprintf('  Median: %.6e\n', median(exact_only_weights));
+end
 
 %% Test simple integral: ∫∫ 1 dA for each k-slice
 fprintf('\n=================================================================\n');
@@ -83,10 +102,10 @@ res_area = zeros(N, 1);
 
 for kj = 1:N
     k = kVals(kj);
-    dk = edges(kj+1) - edges(kj);
 
-    % Exact integration: weight * dk
-    integral_exact = sum(sum(weight_exact(:, :, kj))) * dk;
+    % CRITICAL FIX: weight_exact is already dv/dk = area in (p,q) plane
+    % Do NOT multiply by dk again!
+    integral_exact = sum(sum(weight_exact(:, :, kj)));
     res_exact(kj) = integral_exact - analytical(k);
 
     % Area-based midpoint rule: weight already includes area
@@ -112,7 +131,6 @@ fprintf('\nComputing S_NL using exact volume integration...\n');
 S_NL_exact = zeros(N, 1);
 tic;
 for kj = 1:N
-    dk = edges(kj+1) - edges(kj);
     k = kVals(kj);
 
     % Sum over all (p,q) with non-zero weight
@@ -127,7 +145,9 @@ for kj = 1:N
                 [x, y, z] = waveCosines(k, p, q);
                 kernel = y * z;  % Simplified test
 
-                S_k_local = S_k_local + kernel * weight_exact(pj, qj, kj) * dk;
+                % CRITICAL FIX: weight_exact is already area element (dp*dq)
+                % Do NOT multiply by dk!
+                S_k_local = S_k_local + kernel * weight_exact(pj, qj, kj);
             end
         end
     end
