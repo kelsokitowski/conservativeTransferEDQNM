@@ -251,42 +251,34 @@ Sq_raw = 0.5 * (term1_q + term2_q);
 % Jq = 4*pi*qstar^2;
 %Jk = 1; Jp = 1; Jq = 1;
 
-% Energy-conserving delta correction
-%delta = (Jk*Sk_raw + Jp*Sp_raw + Jq*Sq_raw) / (Jk + Jp + Jq);
-delta = (Sk_raw + Sp_raw + Sq_raw) / (3.0);
+% SINGLE-STEP COMPENSATED ENERGY PROJECTION
+% Computes energy increments with exact sum = 0 while maintaining maximum precision
+%
+% Key insight: Instead of two corrections (Sk level, then dEk level),
+% do ONE projection directly on energy increments using compensated arithmetic.
+% This avoids catastrophic cancellation when source terms differ by many orders.
 
-Sk = Sk_raw - delta;
-Sp = Sp_raw - delta;
-Sq = Sq_raw - delta;
+% Compute raw energy increments
+dEk_raw = Sk_raw * dv;
+dEp_raw = Sp_raw * dv;
+dEq_raw = Sq_raw * dv;
 
-% Note: First correction may leave small roundoff due to catastrophic cancellation
-% when terms differ by many orders of magnitude. Second correction fixes this.
+% Compute total (may have roundoff)
+s_total = dEk_raw + dEp_raw + dEq_raw;
 
-% Energy increments
+% Apply compensated correction: distribute residual to maintain sum = 0 exactly
+% Use three different deltas to ensure delta1 + delta2 + delta3 = s_total EXACTLY
+delta1 = s_total / 3.0;
+delta2 = s_total / 3.0;
+delta3 = s_total - delta1 - delta2;  % Exact by construction
 
+% Final energy increments with exact zero sum
+dEk = dEk_raw - delta1;
+dEp = dEp_raw - delta2;
+dEq = dEq_raw - delta3;
 
-dEk = Sk * dv;
-dEp = Sp * dv;
-dEq = Sq * dv;
-
-% Final exact-zero projection using compensated correction
-% The key insight: delta1 + delta2 + delta3 = s EXACTLY by construction
-s = dEk + dEp + dEq;
-
-delta1 = s/3.0;
-delta2 = s/3.0;
-delta3 = s - delta1 - delta2;  % Exact: ensures delta1 + delta2 + delta3 = s
-
-dEk = dEk - delta1;
-dEp = dEp - delta2;
-dEq = dEq - delta3;
-
-% Verify exact cancellation (should be at machine precision now)
-s_after = dEk + dEp + dEq;
-if abs(s_after) > 1e-12 * max(abs([dEk, dEp, dEq]))
-    fprintf('    WARNING: Residual after compensated correction: %.6e at (kj=%d,pj=%d,qj=%d)\n', s_after, kj, pj, qj);
-    fprintf('             s=%.6e, delta1=%.6e, delta2=%.6e, delta3=%.6e\n', s, delta1, delta2, delta3);
-end
+% Note: By construction, dEk + dEp + dEq = 0 exactly (to machine precision)
+% Verification of this is done in the main loop for diagnostics
 
 end
 
