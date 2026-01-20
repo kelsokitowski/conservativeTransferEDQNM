@@ -93,16 +93,30 @@ function [weight_k, centroidX_k, centroidY_k, centroidZ_k, weight_p, centroidX_p
                         dv(kj,qj,pj) = vol;  % p↔q mirror of 3rd cyclic
                     end
 
-                    % Compute p,q centroids from moments
-                    % k-centroid is set to kVals(kj) by design (not from moments)
+                    % Compute ALL centroids from exact analytical moments
                     pc_true = mp / vol;  % p-centroid from moment
                     qc_true = mq / vol;  % q-centroid from moment
-                    kc_true = kVals(kj); % k-centroid = prescribed value
+                    kc_computed = mk / vol;  % k-centroid from moment (exact!)
+
+                    % Validate k-centroid is within physical bounds
+                    % Use relative tolerance based on bin width
+                    tol = 1e-12 * (kU - kL);
+                    if kc_computed >= kL - tol && kc_computed <= kU + tol
+                        % Clamp to exact bounds (handles tiny numerical overshoot)
+                        kc_true = max(kL, min(kU, kc_computed));
+                    else
+                        % Fallback: Use geometric center only if moment-based fails
+                        % This should be extremely rare with exact integration
+                        kc_true = 0.5 * (kL + kU);
+                        fprintf('WARNING: Invalid k-centroid %.6e outside [%.6e, %.6e] for (pj=%d,qj=%d,kj=%d)\n', ...
+                                kc_computed, kL, kU, pj, qj, kj);
+                        fprintf('         Using geometric center %.6e instead\n', kc_true);
+                    end
 
                     % Store centroids for k-slice at (pj,qj,kj)
                     centroidX_k(pj,qj,kj) = pc_true;  % p coordinate
                     centroidY_k(pj,qj,kj) = qc_true;  % q coordinate
-                    centroidZ_k(pj,qj,kj) = kc_true;  % k coordinate
+                    centroidZ_k(pj,qj,kj) = kc_true;  % k coordinate (exact from moments!)
 
                     % Mirror p<->q symmetry for k-slice centroids
                     if qj ~= pj
