@@ -93,30 +93,40 @@ function [weight_k, centroidX_k, centroidY_k, centroidZ_k, weight_p, centroidX_p
                         dv(kj,qj,pj) = vol;  % p↔q mirror of 3rd cyclic
                     end
 
-                    % Compute ALL centroids from exact analytical moments
-                    pc_true = mp / vol;  % p-centroid from moment
-                    qc_true = mq / vol;  % q-centroid from moment
-                    kc_computed = mk / vol;  % k-centroid from moment (exact!)
+                    % Compute p and q centroids from exact analytical moments (always)
+                    pc_true = mp / vol;
+                    qc_true = mq / vol;
 
-                    % Validate k-centroid is within physical bounds
-                    % Use relative tolerance based on bin width
-                    tol = 1e-12 * (kU - kL);
-                    if kc_computed >= kL - tol && kc_computed <= kU + tol
-                        % Clamp to exact bounds (handles tiny numerical overshoot)
-                        kc_true = max(kL, min(kU, kc_computed));
+                    % HYBRID CENTROID STRATEGY FOR k-COORDINATE:
+                    % - Interior cells (no boundary cuts): use prescribed kVals(kj)
+                    % - Boundary-cut cells: compute from exact analytical moments
+                    if is_interior_cell(pL, pU, qL, qU, kL, kU)
+                        % Interior cell: use prescribed centroid for consistency
+                        kc_true = kVals(kj);
                     else
-                        % Fallback: Use geometric center only if moment-based fails
-                        % This should be extremely rare with exact integration
-                        kc_true = 0.5 * (kL + kU);
-                        fprintf('WARNING: Invalid k-centroid %.6e outside [%.6e, %.6e] for (pj=%d,qj=%d,kj=%d)\n', ...
-                                kc_computed, kL, kU, pj, qj, kj);
-                        fprintf('         Using geometric center %.6e instead\n', kc_true);
+                        % Boundary-cut cell: compute from exact analytical moments
+                        kc_computed = mk / vol;
+
+                        % Validate k-centroid is within physical bounds
+                        % Use relative tolerance based on bin width
+                        tol = 1e-12 * (kU - kL);
+                        if kc_computed >= kL - tol && kc_computed <= kU + tol
+                            % Clamp to exact bounds (handles tiny numerical overshoot)
+                            kc_true = max(kL, min(kU, kc_computed));
+                        else
+                            % Truly pathological case: use geometric center fallback
+                            % With boundary detection, this should be extremely rare
+                            kc_true = 0.5 * (kL + kU);
+                            fprintf('WARNING: Invalid k-centroid %.6e outside [%.6e, %.6e] for boundary cell (pj=%d,qj=%d,kj=%d)\n', ...
+                                    kc_computed, kL, kU, pj, qj, kj);
+                            fprintf('         Using geometric center %.6e instead\n', kc_true);
+                        end
                     end
 
                     % Store centroids for k-slice at (pj,qj,kj)
                     centroidX_k(pj,qj,kj) = pc_true;  % p coordinate
                     centroidY_k(pj,qj,kj) = qc_true;  % q coordinate
-                    centroidZ_k(pj,qj,kj) = kc_true;  % k coordinate (exact from moments!)
+                    centroidZ_k(pj,qj,kj) = kc_true;  % k coordinate (hybrid strategy!)
 
                     % Mirror p<->q symmetry for k-slice centroids
                     if qj ~= pj
@@ -206,6 +216,34 @@ function md = intervalMinAbsDiff(a,b,c,d)
             md = a - d;
         end
     end
+end
+
+% =========================================================================
+% BOUNDARY DETECTION FOR HYBRID CENTROID STRATEGY
+% =========================================================================
+function is_interior = is_interior_cell(pL, pU, qL, qU, kL, kU)
+    % Check if cell [pL,pU] × [qL,qU] × [kL,kU] is completely interior
+    % to the triad domain |p-q| < k < p+q (no boundary intersections)
+    %
+    % Interior means: for all (p,q) in [pL,pU]×[qL,qU],
+    %                 the entire k-range [kL,kU] is strictly inside the domain
+    %
+    % Returns true if cell does NOT intersect any boundary surface
+
+    % Use small margin to ensure truly interior (not just touching boundary)
+    margin = 1e-10 * max([pU-pL, qU-qL, kU-kL]);
+
+    % Minimum of (p+q) over the box: occurs at (pL, qL)
+    min_sum = pL + qL;
+
+    % Maximum of |p-q| over the box: check all corners
+    % Since |p-q| increases as we move to opposite corners
+    max_diff = max(abs(pU - qL), abs(qU - pL));
+
+    % Interior condition with margin:
+    % - kU < min_sum: upper boundary k = p+q is never reached
+    % - kL > max_diff: lower boundary k = |p-q| is never reached
+    is_interior = (kU < min_sum - margin) && (kL > max_diff + margin);
 end
 
 % =========================================================================
