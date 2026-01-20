@@ -135,6 +135,9 @@ function [weight_k, centroidX_k, centroidY_k, centroidZ_k, weight_p, centroidX_p
                     if centroidY_k(i,j,k) == 0
                         centroidY_k(i,j,k) = kVals(j);
                     end
+                    if centroidZ_k(i,j,k) == 0
+                        centroidZ_k(i,j,k) = kVals(k);
+                    end
 
                     if centroidX_p(i,j,k) == 0
                         centroidX_p(i,j,k) = kVals(i);
