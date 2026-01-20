@@ -129,12 +129,24 @@ function [weight_k, centroidX_k, centroidY_k, centroidZ_k, weight_p, centroidX_p
                             % Clamp to exact bounds (handles tiny numerical overshoot)
                             kc_true = max(kL, min(kU, kc_computed));
                         else
-                            % Truly pathological case: use geometric center fallback
-                            % With boundary detection, this should be extremely rare
-                            kc_true = 0.5 * (kL + kU);
-                            fprintf('WARNING: Invalid k-centroid %.6e outside [%.6e, %.6e] for boundary cell (pj=%d,qj=%d,kj=%d)\n', ...
-                                    kc_computed, kL, kU, pj, qj, kj);
-                            fprintf('         Using geometric center %.6e instead\n', kc_true);
+                            % Pathological case: moment-based mk/vol gives invalid result
+                            % This happens when polynomial moment integration fails due to
+                            % complex piecewise geometry and branch classification issues.
+                            %
+                            % Use ROBUST volume-weighted centroid: evaluate k at each
+                            % polygon piece's geometric centroid and average by volume.
+                            kc_robust = compute_k_centroid_robust(kL, kU, pL, pU, qL, qU);
+
+                            % Validate robust centroid
+                            if kc_robust >= kL - tol && kc_robust <= kU + tol
+                                kc_true = max(kL, min(kU, kc_robust));
+                            else
+                                % Still failed: use geometric center as last resort
+                                kc_true = 0.5 * (kL + kU);
+                                fprintf('WARNING: Both mk/vol (%.6e) and robust (%.6e) invalid for [%.6e, %.6e] at (pj=%d,qj=%d,kj=%d)\n', ...
+                                        kc_computed, kc_robust, kL, kU, pj, qj, kj);
+                                fprintf('         Using geometric center %.6e as last resort\n', kc_true);
+                            end
                         end
                     end
 
@@ -259,6 +271,99 @@ function is_interior = is_interior_cell(pL, pU, qL, qU, kL, kU)
     % - kU < min_sum: upper boundary k = p+q is never reached
     % - kL > max_diff: lower boundary k = |p-q| is never reached
     is_interior = (kU < min_sum - margin) && (kL > max_diff + margin);
+end
+
+% =========================================================================
+% ROBUST K-CENTROID FOR PATHOLOGICAL BOUNDARY CELLS
+% =========================================================================
+function kc_robust = compute_k_centroid_robust(kL, kU, pL, pU, qL, qU)
+    % Computes k-centroid using volume-weighted averaging at polygon piece centroids
+    %
+    % This avoids the polynomial moment integration mk = 0.5*∫∫(upper²-lower²) dp dq
+    % which can fail for complex geometries with incorrect branch classification.
+    %
+    % Instead: For each polygon piece with geometric centroid (pc, qc),
+    %          evaluate k_piece = 0.5*(upper(pc,qc) + lower(pc,qc))
+    %          and weight by piece's volume contribution.
+    %
+    % This is guaranteed valid since (pc,qc) is inside the piece by construction.
+
+    kc_robust = 0.0;
+    total_vol = 0.0;
+
+    if kU <= kL
+        kc_robust = 0.5 * (kL + kU);
+        return;
+    end
+
+    % Same clipping logic as dv_moments_oneCell_exact
+    rect = [pL qL; pU qL; pU qU; pL qU];
+    lines = [1  1  kL; 1  1  kU; 1 -1  0; 1 -1  kL; 1 -1  kU; 1 -1 -kL; 1 -1 -kU];
+
+    polys = {rect};
+    for i = 1:size(lines,1)
+        a = lines(i,1); b = lines(i,2); c = lines(i,3);
+        newPolys = {};
+        for t = 1:numel(polys)
+            P = polys{t};
+            if isempty(P) || size(P,1) < 3, continue; end
+
+            Pin  = clip_halfspace(P,  a, b, c);
+            Pout = clip_halfspace(P, -a, -b, -c);
+
+            if ~isempty(Pin)  && size(Pin,1)  >= 3, newPolys{end+1}  = Pin;  end %#ok<AGROW>
+            if ~isempty(Pout) && size(Pout,1) >= 3, newPolys{end+1} = Pout; end %#ok<AGROW>
+        end
+
+        polys = newPolys;
+        if isempty(polys)
+            kc_robust = 0.5 * (kL + kU);
+            return;
+        end
+    end
+
+    % For each polygon piece: evaluate k at geometric centroid, weight by area
+    for t = 1:numel(polys)
+        P = polys{t};
+        if isempty(P) || size(P,1) < 3, continue; end
+
+        % Get polygon area and geometric centroid
+        [A, Mx, My] = poly_moments(P(:,1), P(:,2));
+        if A <= 0, continue; end
+
+        pc = Mx / A;  % p-coordinate of geometric centroid
+        qc = My / A;  % q-coordinate of geometric centroid
+
+        % Evaluate k-boundaries at (pc, qc)
+        s = pc + qc;
+        d = pc - qc;
+        absd = abs(d);
+
+        upper = min(kU, s);
+        lower = max(kL, absd);
+
+        % Tolerance check: ensure valid region at this centroid
+        if upper <= lower + 1e-10 * (kU - kL)
+            continue;
+        end
+
+        % k-coordinate at piece centroid: midpoint of [lower, upper]
+        kc_piece = 0.5 * (upper + lower);
+
+        % Contribution to integration: upper - lower (height in k-direction)
+        L_piece = upper - lower;
+        dv_piece = A * L_piece;
+
+        % Accumulate volume-weighted k-centroid
+        kc_robust = kc_robust + kc_piece * dv_piece;
+        total_vol = total_vol + dv_piece;
+    end
+
+    if total_vol > 0
+        kc_robust = kc_robust / total_vol;
+    else
+        kc_robust = 0.5 * (kL + kU);
+    end
 end
 
 % =========================================================================
