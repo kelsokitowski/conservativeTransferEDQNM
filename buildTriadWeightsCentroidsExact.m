@@ -100,11 +100,26 @@ function [weight_k, centroidX_k, centroidY_k, centroidZ_k, weight_p, centroidX_p
                     % HYBRID CENTROID STRATEGY FOR k-COORDINATE:
                     % - Interior cells (no boundary cuts): use prescribed kVals(kj)
                     % - Boundary-cut cells: compute from exact analytical moments
+                    %
+                    % CRITICAL ACCURACY CONSIDERATION (Classic Midpoint Rule):
+                    % For boundary-cut cells, the actual integration domain (after
+                    % Sutherland-Hodgman clipping) may be a complex subset of [kL,kU].
+                    % The prescribed grid center kVals(kj) could lie:
+                    %   (a) Inside the clipped region → could use kVals(kj)
+                    %   (b) Outside the clipped region → MUST use actual centroid
+                    %
+                    % Rather than trying to determine (a) vs (b) with expensive checks,
+                    % we use a simple rule:
+                    %   - Interior cells: kVals(kj) is guaranteed inside → use it
+                    %   - Boundary cells: use mk/vol (exact centroid of clipped region)
+                    %
+                    % This ensures the midpoint rule is always applied correctly.
+
                     if is_interior_cell(pL, pU, qL, qU, kL, kU)
-                        % Interior cell: use prescribed centroid for consistency
+                        % Interior cell: kVals(kj) guaranteed inside domain
                         kc_true = kVals(kj);
                     else
-                        % Boundary-cut cell: compute from exact analytical moments
+                        % Boundary-cut cell: use exact centroid of clipped region
                         kc_computed = mk / vol;
 
                         % Validate k-centroid is within physical bounds
