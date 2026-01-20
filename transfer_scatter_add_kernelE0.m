@@ -256,6 +256,13 @@ dEk = dEk - s/3.0;
 dEp = dEp - s/3.0;
 dEq = dEq - s/3.0;
 
+% Verify correction worked
+s_after = dEk + dEp + dEq;
+if abs(s_after) > 1e-10
+    fprintf('    WARNING: Non-zero residual AFTER second correction: s_after=%.6e at (kj=%d,pj=%d,qj=%d)\n', s_after, kj, pj, qj);
+    fprintf('             s_before=%.6e\n', s);
+end
+
 end
 
 % ============================================================================
