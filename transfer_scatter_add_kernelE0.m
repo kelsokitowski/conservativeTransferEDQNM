@@ -88,6 +88,7 @@ cE = zeros(kLength,1);  % Kahan compensation
 % Diagnostic scalars (thread-safe with OpenMP REDUCTION)
 numTriadsUsed = 0;
 maxTriadEnergyResidual = 0.0;
+max_kj = 0; max_pj = 0; max_qj = 0;  % Track location of maximum
 
 % ===========================================================================
 % K-SLICE LOOP: Parallelizable over kj (see OpenMP directives in header)
@@ -118,7 +119,10 @@ for kj = 1:kLength
                 fprintf('    INFO: Line 115 residual = %.6e at (kj=%d,pj=%d,qj=%d)\n', triad_residual, kj, pj, qj);
                 fprintf('          dEk=%.6e, dEp=%.6e, dEq=%.6e\n', dEk, dEp, dEq);
             end
-            maxTriadEnergyResidual = max(maxTriadEnergyResidual, triad_residual);
+            if triad_residual > maxTriadEnergyResidual
+                maxTriadEnergyResidual = triad_residual;
+                max_kj = kj; max_pj = pj; max_qj = qj;
+            end
             numTriadsUsed = numTriadsUsed + 1;
 
             % Mirror p<->q if needed
@@ -155,6 +159,9 @@ end
 
 S_NL_E = dE ./ dk;
 FV_total_energy_transfer = sum(dE);  % Total energy change (should be ~0)
+
+% Report where maximum residual occurred
+fprintf('Maximum residual occurred at (kj=%d, pj=%d, qj=%d) with value %.6e\n', max_kj, max_pj, max_qj, maxTriadEnergyResidual);
 
 end
 
