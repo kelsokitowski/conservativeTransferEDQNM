@@ -231,6 +231,10 @@ Sk = Sk_raw - delta;
 Sp = Sp_raw - delta;
 Sq = Sq_raw - delta;
 
+if abs(Sk + Sp + Sq) > 1e-10 * max(abs([Sk, Sp, Sq]))
+    fprintf('    DEBUG: Non-zero Sk+Sp+Sq after first correction: %.6e at (kj=%d,pj=%d,qj=%d)\n', Sk+Sp+Sq, kj, pj, qj);
+end
+
 % Energy increments
 
 
@@ -240,6 +244,14 @@ dEq = Sq * dv;
 
 % Final exact-zero projection (kills roundoff at triad level)
 s = dEk + dEp + dEq;
+
+if abs(s) > 1e3
+    fprintf('    DEBUG: Large residual before correction: s=%.6e at (kj=%d,pj=%d,qj=%d)\n', s, kj, pj, qj);
+    fprintf('           Sk_raw=%.6e, Sp_raw=%.6e, Sq_raw=%.6e, sum=%.6e\n', Sk_raw, Sp_raw, Sq_raw, Sk_raw+Sp_raw+Sq_raw);
+    fprintf('           Sk=%.6e, Sp=%.6e, Sq=%.6e, sum=%.6e\n', Sk, Sp, Sq, Sk+Sp+Sq);
+    fprintf('           dv=%.6e\n', dv);
+end
+
 dEk = dEk - s/3.0;
 dEp = dEp - s/3.0;
 dEq = dEq - s/3.0;
