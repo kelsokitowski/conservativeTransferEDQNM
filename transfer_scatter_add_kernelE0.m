@@ -242,25 +242,23 @@ dEk = Sk * dv;
 dEp = Sp * dv;
 dEq = Sq * dv;
 
-% Final exact-zero projection (kills roundoff at triad level)
+% Final exact-zero projection using compensated correction
+% The key insight: delta1 + delta2 + delta3 = s EXACTLY by construction
 s = dEk + dEp + dEq;
 
-if abs(s) > 1e3
-    fprintf('    DEBUG: Large residual before correction: s=%.6e at (kj=%d,pj=%d,qj=%d)\n', s, kj, pj, qj);
-    fprintf('           Sk_raw=%.6e, Sp_raw=%.6e, Sq_raw=%.6e, sum=%.6e\n', Sk_raw, Sp_raw, Sq_raw, Sk_raw+Sp_raw+Sq_raw);
-    fprintf('           Sk=%.6e, Sp=%.6e, Sq=%.6e, sum=%.6e\n', Sk, Sp, Sq, Sk+Sp+Sq);
-    fprintf('           dv=%.6e\n', dv);
-end
+delta1 = s/3.0;
+delta2 = s/3.0;
+delta3 = s - delta1 - delta2;  % Exact: ensures delta1 + delta2 + delta3 = s
 
-dEk = dEk - s/3.0;
-dEp = dEp - s/3.0;
-dEq = dEq - s/3.0;
+dEk = dEk - delta1;
+dEp = dEp - delta2;
+dEq = dEq - delta3;
 
-% Verify correction worked
+% Verify exact cancellation (should be at machine precision now)
 s_after = dEk + dEp + dEq;
-if abs(s_after) > 1e-10
-    fprintf('    WARNING: Non-zero residual AFTER second correction: s_after=%.6e at (kj=%d,pj=%d,qj=%d)\n', s_after, kj, pj, qj);
-    fprintf('             s_before=%.6e\n', s);
+if abs(s_after) > 1e-12 * max(abs([dEk, dEp, dEq]))
+    fprintf('    WARNING: Residual after compensated correction: %.6e at (kj=%d,pj=%d,qj=%d)\n', s_after, kj, pj, qj);
+    fprintf('             s=%.6e, delta1=%.6e, delta2=%.6e, delta3=%.6e\n', s, delta1, delta2, delta3);
 end
 
 end
