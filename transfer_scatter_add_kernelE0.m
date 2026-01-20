@@ -112,7 +112,13 @@ for kj = 1:kLength
             [dE(pj), cE(pj)] = kahan_add(dE(pj), cE(pj), dEp);
             [dE(qj), cE(qj)] = kahan_add(dE(qj), cE(qj), dEq);
 
-            maxTriadEnergyResidual = max(maxTriadEnergyResidual, abs(dEk+dEp+dEq));
+            % Measure residual - should be at machine precision after compensated correction
+            triad_residual = abs(dEk+dEp+dEq);
+            if triad_residual > 1e-10
+                fprintf('    INFO: Line 115 residual = %.6e at (kj=%d,pj=%d,qj=%d)\n', triad_residual, kj, pj, qj);
+                fprintf('          dEk=%.6e, dEp=%.6e, dEq=%.6e\n', dEk, dEp, dEq);
+            end
+            maxTriadEnergyResidual = max(maxTriadEnergyResidual, triad_residual);
             numTriadsUsed = numTriadsUsed + 1;
 
             % Mirror p<->q if needed
