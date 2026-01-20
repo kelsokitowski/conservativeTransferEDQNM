@@ -108,6 +108,13 @@ for kj = 1:kLength
 
             [dEk,dEp,dEq] = triad_energy_increment_direct(kstar, pstar, qstar, dv_local, kj, pj, qj, logk, logE0, logmu1, nu, t);
 
+            % Special debug for the problematic triad
+            if kj == 102 && pj == 13 && qj == 103
+                fprintf('*** FOUND PROBLEM TRIAD (kj=102, pj=13, qj=103) ***\n');
+                fprintf('    dEk=%.15e, dEp=%.15e, dEq=%.15e\n', dEk, dEp, dEq);
+                fprintf('    residual=%.15e\n', abs(dEk+dEp+dEq));
+            end
+
             % Scatter-add to bins using Kahan summation for precision
             [dE(kj), cE(kj)] = kahan_add(dE(kj), cE(kj), dEk);
             [dE(pj), cE(pj)] = kahan_add(dE(pj), cE(pj), dEp);
